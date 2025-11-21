@@ -1,0 +1,10 @@
+[package]
+name = "fairness_oracle"
+version = "0.0.1"
+edition = "legacy"
+
+[addresses]
+oracle = "0xd8dd0944fb4d1e7c6de401a4c856fa4d54b534451503042411c31d6b5640f993"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "9a4d4016ba66c646c76c4b8d54fa9e767f240ab1" }
