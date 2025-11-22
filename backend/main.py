@@ -16,9 +16,13 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 # internal services
+from backend.services.sui_reader import read_audit_table
 from backend.services.fairness import run_fairness_audit
 from backend.services.explain import generate_explanation
 from backend.services.sui_client import anchor_audit_on_sui
+
+# NEW — Seal client
+from backend.seal.seal_client import seal_encrypt, prepare_identity
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -78,24 +82,18 @@ def remove_file_safe(path: str):
 
 
 # -------------------------------------------------------------------
-# WALRUS UPLOAD via NODE.JS uploader (THE ONLY VALID IMPLEMENTATION)
+# WALRUS UPLOAD via NODE.JS uploader
 # -------------------------------------------------------------------
+@app.get("/audit/proofs")
+def get_all_proofs():
+    try:
+        proofs = read_audit_table()
+        return {"status": "success", "count": len(proofs), "proofs": proofs}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    
 
 def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
-    """
-    Calls Node uploader:
-      node backend/walrus-uploader/upload.js <bundle_path>
-
-    Expects JSON output like:
-    {
-       "blobId": "...",
-       "objectId": "...",
-       "walrusURL": "...",
-       "objectURL": "...",
-       "raw": "..."
-    }
-    """
-
     try:
         result = subprocess.run(
             ["node", "backend/walrus-uploader/upload.js", bundle_path],
@@ -110,7 +108,6 @@ def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
         if result.returncode != 0:
             raise RuntimeError(f"Walrus uploader failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
 
-        # Extract JSON block from stdout
         json_block = None
         for line in stdout.splitlines():
             if line.strip().startswith("{") and line.strip().endswith("}"):
@@ -134,7 +131,7 @@ def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
 
 
 # -------------------------------------------------------------------
-# MAIN ENDPOINT
+# MAIN ENDPOINT (UPDATED WITH SEAL)
 # -------------------------------------------------------------------
 
 @app.post("/upload-dataset")
@@ -176,7 +173,7 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
             "confidence": "0"
         }
 
-    # 5. Build bundle JSON
+    # 5. Build bundle
     bundle = {
         "timestamp": int(time.time()),
         "filename": file.filename,
@@ -187,66 +184,60 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
         "version": "1.0.0"
     }
 
-    # 6. Write bundle.json
+    # 6. Store bundle.json TEMPORARILY
     bundle_path = os.path.join(TMP_DIR, f"bundle_{int(time.time())}.json")
     with open(bundle_path, "w") as f:
         json.dump(bundle, f, indent=2)
 
-    # 7. Upload to Walrus via Node.js
+    # ----------------------------------------------------------
+    # 7. NEW: Seal Encryption BEFORE uploading to Walrus
+    # ----------------------------------------------------------
     try:
-        walrus_info = upload_bundle_to_walrus(bundle_path)
+        audit_id = prepare_identity(int(time.time()))  # eg: audit_001
+        with open(bundle_path, "rb") as f:
+            raw_bytes = f.read()
+
+        encrypted_bytes, backup_key = seal_encrypt(raw_bytes, audit_id)
+
+        # Save encrypted version (this is what we upload)
+        encrypted_path = bundle_path.replace(".json", "_encrypted.bin")
+        with open(encrypted_path, "wb") as f:
+            f.write(encrypted_bytes)
+
+    except Exception as e:
+        logger.exception("Seal encryption failed")
+        return {"status": "seal_error", "error": str(e)}
+
+    # 8. Upload sealed encrypted bundle
+    try:
+        walrus_info = upload_bundle_to_walrus(encrypted_path)
     except Exception as e:
         logger.exception("Walrus upload failed")
-        background.add_task(remove_file_safe, csv_path)
-        background.add_task(remove_file_safe, bundle_path)
-        return JSONResponse(status_code=500, content={
+        return {
             "status": "walrus_upload_failed",
             "error": str(e),
             "bundle": bundle
-        })
+        }
 
-    blob_id = walrus_info.get("blobId")
-    object_id = walrus_info.get("objectId")
-
-    # 8. Anchor on Sui
+    # 9. Anchor on Sui
     try:
         fairness_score = metrics.get("fairness_score") if isinstance(metrics, dict) else None
-        sui_result = anchor_audit_on_sui(blob_id, fairness_score)
+        sui_result = anchor_audit_on_sui(walrus_info, fairness_score)
     except Exception as e:
         logger.exception("Sui anchoring failed")
         sui_result = {"error": str(e)}
 
-    # 9. Cleanup
+    # Cleanup
     background.add_task(remove_file_safe, csv_path)
     background.add_task(remove_file_safe, bundle_path)
-
-    # 10. Return result
-    # Ensure proof.blob_hash reflects the real walrus blob id when possible
-    try:
-        if isinstance(sui_result, dict):
-            proof = sui_result.get("proof")
-            if proof is None:
-                proof = {}
-                sui_result["proof"] = proof
-
-            # prefer original blobId or normalized blob id
-            real_blob = walrus_info.get("blobId") or walrus_info.get("blob_id") or blob_id
-            if real_blob and not proof.get("blob_hash"):
-                proof["blob_hash"] = real_blob
-            if "fairness_score" not in proof and isinstance(metrics, dict) and metrics.get("fairness_score") is not None:
-                proof["fairness_score"] = metrics.get("fairness_score")
-            if "timestamp" not in proof:
-                proof["timestamp"] = int(time.time())
-            if "proof_hash" not in proof and sui_result.get("proof_hash"):
-                proof["proof_hash"] = sui_result.get("proof_hash")
-    except Exception:
-        # don't fail response if augmentation fails
-        pass
+    background.add_task(remove_file_safe, encrypted_path)
 
     return {
         "status": "success",
         "bundle": bundle,
+        "audit_id": audit_id,
         "walrus": walrus_info,
+        "backup_key": backup_key.hex(),   # optional
         "sui": sui_result
     }
 

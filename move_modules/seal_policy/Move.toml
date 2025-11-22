@@ -1,0 +1,10 @@
+[package]
+name = "seal_policy"
+version = "0.0.1"
+authors = ["Dinesh Kumar"]
+
+[addresses]
+seal_policy = "0x0"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "9a4d4016ba66c646c76c4b8d54fa9e767f240ab1" }

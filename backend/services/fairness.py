@@ -4,6 +4,7 @@ import numpy as np
 import platform
 from sklearn.metrics import confusion_matrix
 from typing import Dict, Any, List, Optional, Tuple
+from .explain import generate_explanation
 
 def _choose_positive_class(series: pd.Series):
     """Choose a reasonable positive class for binarization.
@@ -290,4 +291,21 @@ def run_fairness_audit(df: pd.DataFrame) -> Dict[str, Any]:
         "rows": int(df.shape[0]),
         "columns": int(df.shape[1]),
     }
+    # Attempt to generate an LLM-based explanation for the primary analysis
+    try:
+        # pass a compact metrics dict to the explainer
+        explainer_input = {
+            "primary_protected": primary_protected,
+            "demographic_parity_difference": primary_analysis.get("demographic_parity_difference"),
+            "disparate_impact_ratio": primary_analysis.get("disparate_impact_ratio"),
+            "tpr_gap": primary_analysis.get("tpr_gap"),
+            "fpr_gap": primary_analysis.get("fpr_gap"),
+            "selection_rate": primary_analysis.get("selection_rate"),
+            "per_group_rates": primary_analysis.get("per_group_rates"),
+        }
+        explanation = generate_explanation(explainer_input)
+        result["explanation"] = explanation
+    except Exception:
+        # do not fail the audit if explanation generation fails
+        result["explanation"] = None
     return result

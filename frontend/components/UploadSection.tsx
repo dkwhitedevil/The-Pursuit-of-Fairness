@@ -1,12 +1,62 @@
 // frontend/components/UploadSection.tsx
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function UploadSection() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [computedProofHash, setComputedProofHash] = useState<string | null>(null);
+
+  // compute proof hash when result contains walrus blob id and sui tx digest but no proof_hash
+  // runs asynchronously using Web Crypto
+  useEffect(() => {
+    let mounted = true;
+    async function compute() {
+      setComputedProofHash(null);
+      if (!result) return;
+      try {
+        const blob = result.walrus?.blobId || result.walrus?.blob_id || (result.walrus && (result.walrus.blob || result.walrus.id)) || null;
+        let txDigest = null;
+        const s = result.sui || {};
+        const manifest = result.sui_manifest || {};
+        const pick = (obj: any, ...keys: string[]) => {
+          for (const k of keys) {
+            if (!obj) continue;
+            const v = obj[k];
+            if (v !== undefined && v !== null && v !== "") return v;
+          }
+          return null;
+        };
+        txDigest = pick(s, 'tx_digest', 'tx', 'txDigest', 'digest') || pick(manifest, 'tx_digest', 'tx', 'txDigest', 'digest') || (s.proof && (s.proof.tx_digest || s.proof.tx)) || null;
+        if (!txDigest && s.sui_raw && typeof s.sui_raw.stdout === 'string') {
+          const out = s.sui_raw.stdout;
+          const m = out.match(/Transaction Digest:\s*([A-Za-z0-9]+)/);
+          if (m) txDigest = m[1];
+          else {
+            const m2 = out.match(/\nDigest:\s*([A-Za-z0-9]+)/);
+            if (m2) txDigest = m2[1];
+          }
+        }
+
+        if (!blob || !txDigest) return;
+
+        // compute sha256(blob + txDigest)
+        const txt = String(blob) + String(txDigest);
+        const enc = new TextEncoder();
+        const data = enc.encode(txt);
+        const hashBuf = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuf));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        if (mounted) setComputedProofHash(hashHex);
+      } catch (e) {
+        // ignore
+      }
+    }
+    compute();
+    return () => { mounted = false; };
+  }, [result]);
 
   const handleUpload = async () => {
     setError(null);
@@ -107,22 +157,56 @@ export default function UploadSection() {
               );
             })()}
 
-            {result?.sui && (
-              <div className="p-3 bg-white rounded border">
-                <h4 className="font-medium">Sui Proof</h4>
-                <div className="text-sm mt-2">
-                  <div><strong>Tx Digest:</strong> {result.sui.tx_digest || result.sui_manifest?.tx_digest || "—"}</div>
-                  <div><strong>Proof Hash:</strong> {result.sui.proof_hash || result.sui_manifest?.proof_hash || "—"}</div>
-                  {result.sui.explorer_url && (
-                    <div>
-                      <a href={result.sui.explorer_url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                        View on Sui Explorer
-                      </a>
-                    </div>
-                  )}
+            {result?.sui && (() => {
+              const s = result.sui || {};
+              const manifest = result.sui_manifest || {};
+
+              const pick = (obj: any, ...keys: string[]) => {
+                for (const k of keys) {
+                  if (!obj) continue;
+                  const v = obj[k];
+                  if (v !== undefined && v !== null && v !== "") return v;
+                }
+                return null;
+              };
+
+              // try to find tx digest from common fields
+              let txDigest = pick(s, 'tx_digest', 'tx', 'txDigest', 'digest') || pick(manifest, 'tx_digest', 'tx', 'txDigest', 'digest') || (s.proof && (s.proof.tx_digest || s.proof.tx)) || null;
+
+              // if not found, try parsing raw stdout from sui_raw
+              if (!txDigest && s.sui_raw && typeof s.sui_raw.stdout === 'string') {
+                const out = s.sui_raw.stdout;
+                const m = out.match(/Transaction Digest:\s*([A-Za-z0-9]+)/);
+                if (m) txDigest = m[1];
+                else {
+                  const m2 = out.match(/\nDigest:\s*([A-Za-z0-9]+)/);
+                  if (m2) txDigest = m2[1];
+                }
+              }
+
+              const proofHash = pick(s, 'proof_hash', 'proofHash') || pick(manifest, 'proof_hash', 'proofHash') || (s.proof && (s.proof.proof_hash || s.proof.hash)) || pick(result, 'proof_hash') || computedProofHash || null;
+              const explorer = pick(s, 'explorer_url', 'explorer', 'explorerUrl') || pick(manifest, 'explorer_url', 'explorer') || null;
+
+              // prefer provided explorer, otherwise use suiscan testnet viewer
+              const explorerLink = explorer || (txDigest ? `https://suiscan.xyz/testnet/tx/${txDigest}` : null);
+
+              return (
+                <div className="p-3 bg-white rounded border">
+                  <h4 className="font-medium">Sui Proof</h4>
+                  <div className="text-sm mt-2">
+                    <div><strong>Tx Digest:</strong> {txDigest || '—'}</div>
+                    <div><strong>Proof Hash:</strong> {proofHash || '—'}</div>
+                    {explorerLink && (
+                      <div>
+                        <a href={explorerLink} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                          View on Sui Explorer
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           <details className="mt-3">
@@ -136,3 +220,8 @@ export default function UploadSection() {
     </div>
   );
 }
+
+// compute proof hash when result contains walrus blob id and sui tx digest but no proof_hash
+// this runs in the browser using Web Crypto and sets `computedProofHash` in the component state
+// NOTE: we attach a global side-effect hook above; since this file is a simple component module
+// we re-run the computation when `result` changes via useEffect. Add the hook now.

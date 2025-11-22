@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from "child_process";
 import path from "path";
-import fs from "fs";
 
 function extractJson(output) {
     // remove color codes
@@ -36,7 +35,16 @@ function upload(filePath) {
     console.log("Uploading to Walrus Testnet:", abs);
 
     try {
-        const cmd = `walrus store ${abs} --epochs 2 --json`;
+        const relay = process.env.WALRUS_UPLOAD_RELAY || null;
+        let cmd;
+        if (relay) {
+            console.log(`Using upload relay from WALRUS_UPLOAD_RELAY=${relay}`);
+            cmd = `walrus store ${abs} --upload-relay ${relay} --epochs 2 --skip-tip-confirmation --json`;
+        } else {
+            console.log(`No WALRUS_UPLOAD_RELAY set — using Walrus CLI configured relay`);
+            cmd = `walrus store ${abs} --epochs 2 --skip-tip-confirmation --json`;
+        }
+
         const raw = execSync(cmd, { encoding: "utf8" });
 
         const jsonArr = extractJson(raw);
