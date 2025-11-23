@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "package.json", "use": "@vercel/next" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/$1" }
+  ],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://your-backend.example.com",
+    "NEXT_PUBLIC_APP_NAME": "The Pursuit of Fairness"
+  }
+}
