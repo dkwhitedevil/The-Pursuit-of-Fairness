@@ -1,28 +1,26 @@
-############## STAGE 1: Build Walrus ################
-FROM rust:1.75-slim AS walrus-builder
+############## STAGE 1: FAST Walrus CLI Build ################
+FROM rust:1.75 AS walrus-builder
 
+# Install required system dependencies
 RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    curl \
-    clang \
-    llvm \
-    libclang-dev \
-    cmake \
-    make
+    curl pkg-config libssl-dev cmake make clang llvm
 
 WORKDIR /build
 
 # Download Walrus source tarball
-RUN curl -L https://github.com/MystenLabs/walrus/archive/refs/heads/main.tar.gz -o walrus.tar.gz \
+RUN curl -L https://github.com/MystenLabs/walrus/archive/refs/heads/main.tar.gz \
+    -o walrus.tar.gz \
     && tar -xzf walrus.tar.gz \
     && rm walrus.tar.gz
 
-# Enter the CLI crate
+# Build ONLY the walrus-cli (skip full workspace)
 WORKDIR /build/walrus-main/walrus-cli
 
-# Build Walrus CLI
-RUN cargo build --release
+# Enable parallel builds
+ENV CARGO_BUILD_JOBS=4
+
+# Build CLI only
+RUN cargo build --release --locked
 
 
 ############## STAGE 2: Build Final App ##############
