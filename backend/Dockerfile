@@ -22,12 +22,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get update && apt-get install -y nodejs
 
 # ============================
-# Install Walrus CLI
+# Install Walrus CLI (stable)
 # ============================
-RUN wget https://github.com/walrus-cdn/walrus/releases/download/v0.4.1/walrus_Linux_x86_64.zip -O walrus.zip && \
-    unzip walrus.zip && \
-    mv walrus /usr/local/bin/walrus && chmod +x /usr/local/bin/walrus && \
-    rm -rf walrus.zip
+RUN curl -sSf https://walrus.sh/install.sh | sh && \
+    mv /root/.walrus/bin/walrus /usr/local/bin/walrus && \
+    chmod +x /usr/local/bin/walrus
 
 # ============================
 # Install SUI CLI
@@ -37,6 +36,7 @@ RUN wget https://github.com/MystenLabs/sui/releases/download/testnet-v1.36.0/sui
     mv sui-testnet-x86_64-linux-gnu/sui /usr/local/bin/sui && \
     chmod +x /usr/local/bin/sui && \
     rm -rf sui-testnet-x86_64-linux-gnu*
+
 
 # ============================
 # Working directory
