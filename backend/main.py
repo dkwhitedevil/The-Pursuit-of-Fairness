@@ -136,7 +136,70 @@ def debug_node():
     out, err = p.communicate()
     return {"stdout": out.strip(), "stderr": err.strip()}
 
-    
+@app.get("/debug-walrus")
+def debug_walrus():
+    import subprocess
+    p = subprocess.Popen(
+        ["walrus", "--version"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    out, err = p.communicate()
+    return {"stdout": out.strip(), "stderr": err.strip()}
+
+
+# ---------------------------------------------------------
+# DEBUG: Check Sui CLI
+# ---------------------------------------------------------
+@app.get("/debug-sui")
+def debug_sui():
+    import subprocess
+    p = subprocess.Popen(
+        ["sui", "--version"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    out, err = p.communicate()
+    return {"stdout": out.strip(), "stderr": err.strip()}
+
+
+# ---------------------------------------------------------
+# DEBUG: Check Node installation
+# ---------------------------------------------------------
+@app.get("/debug-node")
+def debug_node():
+    import subprocess
+    p = subprocess.Popen(
+        ["node", "-v"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    out, err = p.communicate()
+    return {"stdout": out.strip(), "stderr": err.strip()}
+
+
+# ---------------------------------------------------------
+# DEBUG: Show important backend paths
+# ---------------------------------------------------------
+@app.get("/debug-paths")
+def debug_paths():
+    import os
+
+    backend_root = os.getcwd()
+    return {
+        "cwd": backend_root,
+        "expected_files": {
+            "services/seal_client.js": os.path.exists(os.path.join(backend_root, "services", "seal_client.js")),
+            "services/seal_node_bridge.py": os.path.exists(os.path.join(backend_root, "services", "seal_node_bridge.py")),
+            "walrus-uploader/upload.js": os.path.exists(os.path.join(backend_root, "walrus-uploader", "upload.js")),
+            "requirements.txt": os.path.exists(os.path.join(backend_root, "requirements.txt")),
+            "main.py": os.path.exists(os.path.join(backend_root, "main.py")),
+        }
+    }
+
 @app.post("/upload-dataset")
 async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(...)):
 

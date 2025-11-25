@@ -22,10 +22,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get update && apt-get install -y nodejs
 
 # ============================
-# Install Walrus CLI (stable)
+# Install Walrus CLI (GitHub binary)
 # ============================
-RUN curl -sSf https://walrus.sh/install.sh | sh && \
-    mv /root/.walrus/bin/walrus /usr/local/bin/walrus && \
+RUN wget https://github.com/MystenLabs/walrus/releases/latest/download/walrus-x86_64-unknown-linux-gnu \
+    -O /usr/local/bin/walrus && \
     chmod +x /usr/local/bin/walrus
 
 # ============================
@@ -35,23 +35,22 @@ RUN wget https://github.com/MystenLabs/sui/releases/download/testnet-v1.36.0/sui
     tar xvf sui-testnet-x86_64-linux-gnu.tgz && \
     mv sui-testnet-x86_64-linux-gnu/sui /usr/local/bin/sui && \
     chmod +x /usr/local/bin/sui && \
-    rm -rf sui-testnet-x86_64-linux-gnu*
-
+    rm -rf sui-testnet-x86_64-linux-gnu.tgz sui-testnet-x86_64-linux-gnu
 
 # ============================
-# Working directory
+# Set working directory
 # ============================
 WORKDIR /app
 
 # ============================
-# Copy backend ONLY
+# Copy backend folder into image
 # ============================
 COPY . /app
 
 # ============================
 # Install Node dependencies for Seal client
 # ============================
-RUN cd /app/services && \
+RUN cd services && \
     npm init -y && \
     npm install @mysten/sui @mysten/seal
 
@@ -61,12 +60,12 @@ RUN cd /app/services && \
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ============================
-# Expose port
+# Expose port (Render uses $PORT)
 # ============================
 ENV PORT=10000
 EXPOSE 10000
 
 # ============================
-# Start FastAPI
+# Start FastAPI server
 # ============================
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]
