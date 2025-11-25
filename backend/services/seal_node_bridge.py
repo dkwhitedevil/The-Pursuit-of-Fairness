@@ -1,9 +1,10 @@
-# backend/services/seal_node_bridge.py
-
 import subprocess
 import json
 import os
 import uuid
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # backend/services
+CLIENT_JS = os.path.join(BASE_DIR, "seal_client.js")   # absolute path
 
 TMP_DIR = os.path.join(os.getcwd(), "tmp")
 os.makedirs(TMP_DIR, exist_ok=True)
@@ -16,14 +17,13 @@ def prepare_identity(_: int = None) -> str:
 
 def seal_encrypt_node(input_path: str, identity: str):
     """
-    Runs the Node.js SEAL client inside Docker on Render.
-    
-    - Uses global 'node' (installed in Dockerfile)
-    - Does NOT use WSL ~/.nvm paths
+    Runs the Node.js SEAL client using the absolute JS file path.
     """
 
-    # 🚀 Use global node executable inside Docker container
-    NODE = "node"
+    NODE = "node"  # Docker-installed Node.js
+
+    if not os.path.exists(CLIENT_JS):
+        raise RuntimeError(f"seal_client.js not found at: {CLIENT_JS}")
 
     result = subprocess.run(
         [
@@ -31,7 +31,7 @@ def seal_encrypt_node(input_path: str, identity: str):
             "--experimental-global-webcrypto",
             "--experimental-modules",
             "--no-warnings",
-            "backend/services/seal_client.js",
+            CLIENT_JS,     # absolute full path
             input_path,
             identity,
         ],
@@ -47,7 +47,7 @@ def seal_encrypt_node(input_path: str, identity: str):
             f"STDERR:\n{result.stderr}"
         )
 
-    # --- Extract JSON from Node output ---
+    # Extract JSON output
     json_line = None
     for line in result.stdout.splitlines():
         line_strip = line.strip()
