@@ -3,11 +3,9 @@
 import os
 import json
 import time
-import hashlib
-import tempfile
 import subprocess
 import logging
-import re
+import base64
 
 from typing import Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
@@ -15,14 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
-# internal services
+# Internal services
 from backend.services.sui_reader import read_audit_table
 from backend.services.fairness import run_fairness_audit
 from backend.services.explain import generate_explanation
 from backend.services.sui_client import anchor_audit_on_sui
+import uuid
 
-# NEW — Seal client
-from backend.seal.seal_client import seal_encrypt, prepare_identity
+# Correct Seal client (Node bridge)
+from backend.services.seal_node_bridge import seal_encrypt_node, prepare_identity
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -30,10 +29,7 @@ logger = logging.getLogger(__name__)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "20"))
 
-app = FastAPI(
-    title="The Pursuit of Fairness - Backend",
-    version="1.0.0"
-)
+app = FastAPI(title="The Pursuit of Fairness - Backend", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,12 +43,11 @@ TMP_DIR = os.path.join(os.getcwd(), "tmp")
 os.makedirs(TMP_DIR, exist_ok=True)
 
 
-# -------------------------------------------------------------------
-# TEMP FILE HANDLING
-# -------------------------------------------------------------------
+# ---------------------------------------------------------------
+# Utilities
+
 
 def save_temp_upload(upload_file: UploadFile, max_mb=MAX_UPLOAD_MB) -> str:
-    """Save uploaded CSV safely to /tmp."""
     filename = upload_file.filename or "upload.csv"
     safe_name = f"{int(time.time())}_{filename.replace(' ', '_')}"
     dest = os.path.join(TMP_DIR, safe_name)
@@ -68,7 +63,6 @@ def save_temp_upload(upload_file: UploadFile, max_mb=MAX_UPLOAD_MB) -> str:
                 f.close()
                 os.remove(dest)
                 raise HTTPException(status_code=413, detail="File too large")
-
             f.write(chunk)
 
     return dest
@@ -77,13 +71,44 @@ def save_temp_upload(upload_file: UploadFile, max_mb=MAX_UPLOAD_MB) -> str:
 def remove_file_safe(path: str):
     try:
         os.remove(path)
-    except Exception:
+    except:
         pass
 
 
-# -------------------------------------------------------------------
-# WALRUS UPLOAD via NODE.JS uploader
-# -------------------------------------------------------------------
+# ---------------------------------------------------------------
+# Walrus Upload
+# ---------------------------------------------------------------
+
+def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
+    try:
+        result = subprocess.run(
+            ["node", "backend/walrus-uploader/upload.js", bundle_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Walrus uploader failed:\n{result.stdout}\n{result.stderr}"
+            )
+
+        json_line = None
+        for line in result.stdout.splitlines():
+            if line.strip().startswith("{") and line.strip().endswith("}"):
+                json_line = line
+                break
+
+        if not json_line:
+            raise RuntimeError(f"No JSON output from Walrus uploader:\n{result.stdout}")
+
+        return json.loads(json_line)
+
+    except Exception as e:
+        raise RuntimeError(f"Walrus upload error: {e}")
+
+
+# ---------------------------------------------------------------
+# API — Main Pipeline
+# ---------------------------------------------------------------
 @app.get("/audit/proofs")
 def get_all_proofs():
     try:
@@ -92,80 +117,53 @@ def get_all_proofs():
     except Exception as e:
         return {"status": "error", "message": str(e)}
     
+@app.post("/test-fairness")
+async def test_fairness(file: UploadFile = File(...)):
+    import pandas as pd
+    df = pd.read_csv(file.file)
+    metrics = run_fairness_audit(df)
+    return metrics
 
-def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
-    try:
-        result = subprocess.run(
-            ["node", "backend/walrus-uploader/upload.js", bundle_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+@app.get("/debug-node")
+def debug_node():
+    import subprocess
+    p = subprocess.Popen(
+        ["node", "-v"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    out, err = p.communicate()
+    return {"stdout": out.strip(), "stderr": err.strip()}
 
-        stdout = result.stdout
-        stderr = result.stderr
-
-        if result.returncode != 0:
-            raise RuntimeError(f"Walrus uploader failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
-
-        json_block = None
-        for line in stdout.splitlines():
-            if line.strip().startswith("{") and line.strip().endswith("}"):
-                json_block = line.strip()
-                break
-
-        if not json_block:
-            raise RuntimeError(f"Walrus uploader produced no JSON.\nOutput was:\n{stdout}")
-
-        walrus_info = json.loads(json_block)
-
-        logger.info("Walrus upload success: blob=%s object=%s",
-                    walrus_info.get("blobId"),
-                    walrus_info.get("objectId")
-        )
-
-        return walrus_info
-
-    except Exception as e:
-        raise RuntimeError(f"Walrus upload error: {e}")
-
-
-# -------------------------------------------------------------------
-# MAIN ENDPOINT (UPDATED WITH SEAL)
-# -------------------------------------------------------------------
-
+    
 @app.post("/upload-dataset")
 async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(...)):
-    logger.info("File received: %s", file.filename)
 
     if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are accepted.")
+        raise HTTPException(status_code=400, detail="Only CSV files allowed.")
 
     # 1. Save CSV
-    try:
-        csv_path = save_temp_upload(file)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    csv_path = save_temp_upload(file)
 
     # 2. Load DataFrame
     import pandas as pd
     try:
         df = pd.read_csv(csv_path)
-    except Exception:
+    except:
         background.add_task(remove_file_safe, csv_path)
-        raise HTTPException(status_code=400, detail="Invalid CSV file.")
+        raise HTTPException(status_code=400, detail="Invalid CSV")
 
     # 3. Fairness metrics
     try:
         metrics = run_fairness_audit(df)
     except Exception as e:
-        logger.exception("Fairness error")
         metrics = {"error": str(e)}
 
     # 4. LLM explanation
     try:
         explanation = generate_explanation(metrics)
-    except Exception:
+    except:
         explanation = {
             "summary": "Explanation failed",
             "analysis": "",
@@ -173,7 +171,7 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
             "confidence": "0"
         }
 
-    # 5. Build bundle
+    # 5. Bundle JSON
     bundle = {
         "timestamp": int(time.time()),
         "filename": file.filename,
@@ -183,62 +181,52 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
         "explanation": explanation,
         "version": "1.0.0"
     }
+    bundle_bytes = json.dumps(bundle).encode("utf-8")
 
-    # 6. Store bundle.json TEMPORARILY
-    bundle_path = os.path.join(TMP_DIR, f"bundle_{int(time.time())}.json")
-    with open(bundle_path, "w") as f:
-        json.dump(bundle, f, indent=2)
-
-    # ----------------------------------------------------------
-    # 7. NEW: Seal Encryption BEFORE uploading to Walrus
-    # ----------------------------------------------------------
+    # 6. Seal Encryption (Node)
     try:
-        audit_id = prepare_identity(int(time.time()))  # eg: audit_001
-        with open(bundle_path, "rb") as f:
-            raw_bytes = f.read()
+        audit_id = prepare_identity()
 
-        encrypted_bytes, backup_key = seal_encrypt(raw_bytes, audit_id)
+        temp_input = os.path.join(TMP_DIR, f"bundle_{audit_id}.json")
+        with open(temp_input, "wb") as f:
+            f.write(bundle_bytes)
 
-        # Save encrypted version (this is what we upload)
-        encrypted_path = bundle_path.replace(".json", "_encrypted.bin")
+        audit_id, encrypted_b64, backup_key = seal_encrypt_node(temp_input, audit_id)
+        background.add_task(remove_file_safe, temp_input)
+        encrypted_path = os.path.join(TMP_DIR, f"enc_{audit_id}.bin")
         with open(encrypted_path, "wb") as f:
-            f.write(encrypted_bytes)
+            f.write(base64.b64decode(encrypted_b64))
 
     except Exception as e:
-        logger.exception("Seal encryption failed")
-        return {"status": "seal_error", "error": str(e)}
+        raise HTTPException(status_code=500, detail=f"Seal encryption failed: {e}")
 
-    # 8. Upload sealed encrypted bundle
+    # 7. Upload to Walrus
     try:
         walrus_info = upload_bundle_to_walrus(encrypted_path)
     except Exception as e:
-        logger.exception("Walrus upload failed")
-        return {
-            "status": "walrus_upload_failed",
-            "error": str(e),
-            "bundle": bundle
-        }
+        return JSONResponse(
+            status_code=500,
+            content={"status": "walrus_upload_failed", "error": str(e), "bundle": bundle}
+        )
 
-    # 9. Anchor on Sui
+    # 8. Anchor on Sui
     try:
-        fairness_score = metrics.get("fairness_score") if isinstance(metrics, dict) else None
+        fairness_score = metrics.get("fairness_score")
         sui_result = anchor_audit_on_sui(walrus_info, fairness_score)
     except Exception as e:
-        logger.exception("Sui anchoring failed")
         sui_result = {"error": str(e)}
 
-    # Cleanup
+    # Cleanup temp files
     background.add_task(remove_file_safe, csv_path)
-    background.add_task(remove_file_safe, bundle_path)
     background.add_task(remove_file_safe, encrypted_path)
 
     return {
         "status": "success",
-        "bundle": bundle,
-        "audit_id": audit_id,
+        "encrypted_identity": audit_id,
+        "bundle_metadata": bundle,
         "walrus": walrus_info,
-        "backup_key": backup_key.hex(),   # optional
-        "sui": sui_result
+        "sui": sui_result,
+        "backup_key": backup_key
     }
 
 

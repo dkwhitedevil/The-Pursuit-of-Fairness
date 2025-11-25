@@ -73,7 +73,7 @@ Metrics summary to analyze: {safe}
 
         # Call local model
         response = requests.post(
-            "http://localhost:11434/api/chat",
+            "https://ollama-qwen.zeabur.app/api/chat",
             json={
                 "model": "qwen2.5:0.5b",
                 "messages": [
