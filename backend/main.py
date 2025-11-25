@@ -151,15 +151,11 @@ def debug_walrus():
 # ---------------------------------------------------------
 @app.get("/debug-sui")
 def debug_sui():
-    import subprocess
-    p = subprocess.Popen(
-        ["sui", "--version"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    out, err = p.communicate()
-    return {"stdout": out.strip(), "stderr": err.strip()}
+    try:
+        out = subprocess.check_output(["sui", "client", "active-address"])
+        return {"sui_output": out.decode()}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ---------------------------------------------------------
