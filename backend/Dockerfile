@@ -24,9 +24,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
 # ============================
 # Install Walrus CLI (GitHub binary)
 # ============================
-RUN wget https://github.com/MystenLabs/walrus/releases/latest/download/walrus-x86_64-unknown-linux-gnu \
-    -O /usr/local/bin/walrus && \
-    chmod +x /usr/local/bin/walrus
+RUN npm install -g @walrus/cli
 
 # ============================
 # Install SUI CLI
