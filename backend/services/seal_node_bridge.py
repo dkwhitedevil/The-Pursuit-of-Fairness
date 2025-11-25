@@ -16,10 +16,14 @@ def prepare_identity(_: int = None) -> str:
 
 def seal_encrypt_node(input_path: str, identity: str):
     """
-    Runs the Node.js SEAL client with proper flags for Node 22.
+    Runs the Node.js SEAL client inside Docker on Render.
+    
+    - Uses global 'node' (installed in Dockerfile)
+    - Does NOT use WSL ~/.nvm paths
     """
 
-    NODE = "/home/dk/.nvm/versions/node/v22.21.1/bin/node"
+    # 🚀 Use global node executable inside Docker container
+    NODE = "node"
 
     result = subprocess.run(
         [
@@ -43,7 +47,7 @@ def seal_encrypt_node(input_path: str, identity: str):
             f"STDERR:\n{result.stderr}"
         )
 
-    # --- Extract JSON line ---
+    # --- Extract JSON from Node output ---
     json_line = None
     for line in result.stdout.splitlines():
         line_strip = line.strip()
