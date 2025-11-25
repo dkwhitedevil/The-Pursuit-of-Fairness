@@ -1,63 +1,56 @@
+############## STAGE 1: Build Walrus ################
+FROM rust:1.75-slim AS walrus-builder
+
+RUN apt-get update && apt-get install -y pkg-config libssl-dev curl git
+
+WORKDIR /build
+RUN git clone https://github.com/walrus-move/walrus.git
+WORKDIR /build/walrus/walrus-cli
+
+RUN cargo build --release
+
+############## STAGE 2: Build Final App ##############
 FROM python:3.10-slim
 
-# ----------------------------------------------------
-# System deps
-# ----------------------------------------------------
 RUN apt-get update && apt-get install -y \
-    curl \
-    git \
-    jq \
-    xz-utils \
-    pkg-config \
-    libssl-dev \
-    build-essential \
-    nodejs \
-    npm \
+    curl git jq xz-utils pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ----------------------------------------------------
-# Install Sui CLI (prebuilt, no GitHub API)
-# ----------------------------------------------------
-ENV SUI_VERSION=testnet-v1.61.1
+# Install Node 18+
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
 
+# Copy Walrus CLI
+COPY --from=walrus-builder /build/walrus/target/release/walrus /usr/local/bin/walrus
+RUN chmod +x /usr/local/bin/walrus
+
+# Install Sui CLI
+ENV SUI_VERSION=testnet-v1.61.1
 RUN curl -L "https://github.com/MystenLabs/sui/releases/download/${SUI_VERSION}/sui-${SUI_VERSION}-ubuntu-x86_64.tgz" \
     -o sui.tgz \
     && tar -xzf sui.tgz \
-    && SUI_DIR=$(tar -tf sui.tgz | head -1 | cut -d/ -f1) \
+    && SUI_DIR=$(tar -tf sui.tgz | head -n 1 | cut -d/ -f1) \
     && mv "$SUI_DIR/sui" /usr/local/bin/sui \
     && chmod +x /usr/local/bin/sui \
     && rm -rf sui.tgz "$SUI_DIR"
 
-# ----------------------------------------------------
-# Install Walrus CLI (stable, non-GitHub URL)
-# ----------------------------------------------------
-RUN curl -L "https://walrus-assets.s3.amazonaws.com/cli/walrus-linux-x64" \
-     -o /usr/local/bin/walrus \
-    && chmod +x /usr/local/bin/walrus
-
-# ----------------------------------------------------
 # App source
-# ----------------------------------------------------
 WORKDIR /app
 COPY . /app
 
-# ----------------------------------------------------
-# Node dependencies
-# ----------------------------------------------------
+# Node modules in separate folder
+WORKDIR /app/node-backend
 RUN npm init -y && npm install @mysten/sui @mysten/seal
 
-RUN if [ -d "walrus-uploader" ]; then \
-      cd walrus-uploader && echo '{ "type": "module" }' > package.json; \
+# Enable ESM in walrus-uploader if exists
+RUN if [ -d "/app/walrus-uploader" ]; then \
+      cd /app/walrus-uploader && echo '{"type":"module"}' > package.json; \
     fi
 
-# ----------------------------------------------------
-# Python dependencies
-# ----------------------------------------------------
+# Python deps
+WORKDIR /app
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ----------------------------------------------------
-# Environment
-# ----------------------------------------------------
 ENV PORT=10000
 EXPOSE 10000
 
