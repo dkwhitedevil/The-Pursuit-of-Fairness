@@ -13,12 +13,12 @@ WORKDIR /app
 COPY . /app
 
 # install node deps for seal + walrus uploader
-RUN cd backend/services && \
+RUN cd services && \
     npm init -y && \
     npm install @mysten/sui @mysten/seal
 
 # install walrus uploader dependencies
-RUN cd backend/walrus-uploader && \
+RUN cd walrus-uploader && \
     npm init -y && \
     npm install
 
