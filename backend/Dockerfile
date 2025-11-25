@@ -16,36 +16,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------------------
-# Install Sui (latest linux x86_64)
-# Auto-detects REAL URL from GitHub API
+# Install suiup (official installer)
 # ----------------------------------------------------
-RUN LATEST_SUI_URL=$( \
-      curl -s https://api.github.com/repos/MystenLabs/sui/releases/latest \
-      | jq -r '.assets[] | select(.name | contains("ubuntu-x86_64")).browser_download_url' \
-    ) \
-    && echo "Downloading Sui from: $LATEST_SUI_URL" \
-    && curl -L "$LATEST_SUI_URL" -o sui.tgz \
-    && tar -xzf sui.tgz \
-    && mv sui-testnet-*/bin/sui /usr/local/bin/sui \
-    && chmod +x /usr/local/bin/sui \
-    && rm -rf sui.tgz sui-testnet-*
+RUN curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh
+
+# Add Sui & Walrus binaries to PATH
+ENV PATH="/root/.sui/bin:/root/.cargo/bin:${PATH}"
 
 # ----------------------------------------------------
-# Install Rust (for Walrus)
+# Install Sui & Walrus CLI (non-interactive)
 # ----------------------------------------------------
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# ----------------------------------------------------
-# Install Walrus CLI
-# (This is correct — GitHub releases do NOT exist)
-# ----------------------------------------------------
-RUN cargo install walrus
-
-# ----------------------------------------------------
-# Walrus uploader (Node ESM support)
-# ----------------------------------------------------
-RUN npm install -g @walrus/cli
+RUN suiup install sui
+RUN suiup install walrus
 
 # ----------------------------------------------------
 # App source
@@ -53,22 +35,29 @@ RUN npm install -g @walrus/cli
 WORKDIR /app
 COPY . /app
 
-# Node libs used by your backend
-RUN npm install @mysten/sui @mysten/seal
+# ----------------------------------------------------
+# Node dependencies for backend
+# ----------------------------------------------------
+RUN npm init -y && npm install @mysten/sui @mysten/seal
 
-# For ESM uploader folder
+# If ESM uploader folder exists, convert to module mode
 RUN if [ -d "walrus-uploader" ]; then \
       cd walrus-uploader && \
       echo '{ "type": "module" }' > package.json; \
     fi
 
-# Python deps
+# ----------------------------------------------------
+# Python dependencies
+# ----------------------------------------------------
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ----------------------------------------------------
-# Run API
+# Environment + Port
 # ----------------------------------------------------
 ENV PORT=10000
 EXPOSE 10000
 
+# ----------------------------------------------------
+# Start FastAPI / Uvicorn
+# ----------------------------------------------------
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]
