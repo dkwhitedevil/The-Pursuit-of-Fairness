@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================
-# Global Walrus CLI
+# Global Walrus CLI (UPDATED)
 # ============================
-RUN npm install -g @walrus/cli
+# Force correct version so "walrus store" works
+RUN npm install -g @walrus/cli@latest
 
 # ============================
 # App source
@@ -30,13 +31,10 @@ RUN npm install @mysten/sui @mysten/seal
 # ============================
 # Walrus uploader ESM support
 # ============================
-# Add a minimal package.json to support "type: module"
 RUN if [ -d "walrus-uploader" ]; then \
       cd walrus-uploader && \
       echo '{ "type": "module" }' > package.json; \
     fi
-
-# No npm install needed — upload.js uses only built-in modules
 
 # ============================
 # Python dependencies
