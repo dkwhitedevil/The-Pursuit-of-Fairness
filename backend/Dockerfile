@@ -16,18 +16,24 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ----------------------------------------------------
-# Install suiup (official installer)
+# Install Sui CLI (prebuilt, no GitHub API)
 # ----------------------------------------------------
-RUN curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh
+ENV SUI_VERSION=testnet-v1.61.1
 
-# Add Sui & Walrus binaries to PATH
-ENV PATH="/root/.sui/bin:/root/.cargo/bin:${PATH}"
+RUN curl -L "https://github.com/MystenLabs/sui/releases/download/${SUI_VERSION}/sui-${SUI_VERSION}-ubuntu-x86_64.tgz" \
+    -o sui.tgz \
+    && tar -xzf sui.tgz \
+    && SUI_DIR=$(tar -tf sui.tgz | head -1 | cut -d/ -f1) \
+    && mv "$SUI_DIR/sui" /usr/local/bin/sui \
+    && chmod +x /usr/local/bin/sui \
+    && rm -rf sui.tgz "$SUI_DIR"
 
 # ----------------------------------------------------
-# Install Sui & Walrus CLI (non-interactive)
+# Install Walrus CLI (stable, non-GitHub URL)
 # ----------------------------------------------------
-RUN suiup install sui
-RUN suiup install walrus
+RUN curl -L "https://walrus-assets.s3.amazonaws.com/cli/walrus-linux-x64" \
+     -o /usr/local/bin/walrus \
+    && chmod +x /usr/local/bin/walrus
 
 # ----------------------------------------------------
 # App source
@@ -36,14 +42,12 @@ WORKDIR /app
 COPY . /app
 
 # ----------------------------------------------------
-# Node dependencies for backend
+# Node dependencies
 # ----------------------------------------------------
 RUN npm init -y && npm install @mysten/sui @mysten/seal
 
-# If ESM uploader folder exists, convert to module mode
 RUN if [ -d "walrus-uploader" ]; then \
-      cd walrus-uploader && \
-      echo '{ "type": "module" }' > package.json; \
+      cd walrus-uploader && echo '{ "type": "module" }' > package.json; \
     fi
 
 # ----------------------------------------------------
@@ -52,12 +56,9 @@ RUN if [ -d "walrus-uploader" ]; then \
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ----------------------------------------------------
-# Environment + Port
+# Environment
 # ----------------------------------------------------
 ENV PORT=10000
 EXPOSE 10000
 
-# ----------------------------------------------------
-# Start FastAPI / Uvicorn
-# ----------------------------------------------------
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]
