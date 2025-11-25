@@ -4,7 +4,7 @@
 FROM python:3.10-slim
 
 # ============================
-# Install required system packages
+# Install system packages
 # ============================
 RUN apt-get update && apt-get install -y \
     curl \
@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     git \
     build-essential \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # ============================
 # Install Node.js 18
@@ -22,33 +22,32 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get update && apt-get install -y nodejs
 
 # ============================
-# Install Walrus CLI (GitHub binary)
+# Install Walrus CLI (official installer)
 # ============================
-RUN npm install -g @walrus/cli
+RUN curl -sSf https://walrus.sh/install.sh | sh
+ENV PATH="/root/.walrus/bin:${PATH}"
 
 # ============================
-# Install SUI CLI
+# Install Sui CLI using suiup
 # ============================
-RUN wget https://github.com/MystenLabs/sui/releases/download/testnet-v1.36.0/sui-testnet-x86_64-linux-gnu.tgz && \
-    tar xvf sui-testnet-x86_64-linux-gnu.tgz && \
-    mv sui-testnet-x86_64-linux-gnu/sui /usr/local/bin/sui && \
-    chmod +x /usr/local/bin/sui && \
-    rm -rf sui-testnet-x86_64-linux-gnu.tgz sui-testnet-x86_64-linux-gnu
+RUN curl -fsSL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+RUN suiup install sui@testnet
 
 # ============================
-# Set working directory
+# Working directory
 # ============================
 WORKDIR /app
 
 # ============================
-# Copy backend folder into image
+# Copy app source
 # ============================
 COPY . /app
 
 # ============================
-# Install Node dependencies for Seal client
+# Install Node deps for Seal
 # ============================
-RUN cd services && \
+RUN cd backend/services && \
     npm init -y && \
     npm install @mysten/sui @mysten/seal
 
@@ -58,12 +57,12 @@ RUN cd services && \
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ============================
-# Expose port (Render uses $PORT)
+# Expose port
 # ============================
 ENV PORT=10000
 EXPOSE 10000
 
 # ============================
-# Start FastAPI server
+# Start FastAPI
 # ============================
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]
