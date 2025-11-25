@@ -1,7 +1,15 @@
 ############## STAGE 1: Build Walrus ################
 FROM rust:1.75-slim AS walrus-builder
 
-RUN apt-get update && apt-get install -y pkg-config libssl-dev curl
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    curl \
+    clang \
+    llvm \
+    libclang-dev \
+    cmake \
+    make
 
 WORKDIR /build
 
