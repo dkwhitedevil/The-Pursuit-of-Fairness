@@ -14,14 +14,14 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 # Internal services
-from backend.services.sui_reader import read_audit_table
-from backend.services.fairness import run_fairness_audit
-from backend.services.explain import generate_explanation
-from backend.services.sui_client import anchor_audit_on_sui
+from services.sui_reader import read_audit_table
+from services.fairness import run_fairness_audit
+from services.explain import generate_explanation
+from services.sui_client import anchor_audit_on_sui
 import uuid
 
 # Correct Seal client (Node bridge)
-from backend.services.seal_node_bridge import seal_encrypt_node, prepare_identity
+from services.seal_node_bridge import seal_encrypt_node, prepare_identity
 
 load_dotenv()
 logger = logging.getLogger(__name__)
