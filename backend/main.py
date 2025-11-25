@@ -78,11 +78,10 @@ def remove_file_safe(path: str):
 # ---------------------------------------------------------------
 # Walrus Upload
 # ---------------------------------------------------------------
-
 def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
     try:
         result = subprocess.run(
-            ["node", "backend/walrus-uploader/upload.js", bundle_path],
+            ["node", "walrus-uploader/upload.js", bundle_path],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
 
@@ -91,16 +90,14 @@ def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
                 f"Walrus uploader failed:\n{result.stdout}\n{result.stderr}"
             )
 
-        json_line = None
-        for line in result.stdout.splitlines():
-            if line.strip().startswith("{") and line.strip().endswith("}"):
-                json_line = line
-                break
-
-        if not json_line:
-            raise RuntimeError(f"No JSON output from Walrus uploader:\n{result.stdout}")
-
-        return json.loads(json_line)
+        try:
+            # Walrus upload.js always prints JSON as final line
+            data = json.loads(result.stdout.strip().split("\n")[-1])
+            return data
+        except Exception:
+            raise RuntimeError(
+                f"Walrus uploader did not output valid JSON:\n{result.stdout}\n{result.stderr}"
+            )
 
     except Exception as e:
         raise RuntimeError(f"Walrus upload error: {e}")
@@ -168,17 +165,7 @@ def debug_sui():
 # ---------------------------------------------------------
 # DEBUG: Check Node installation
 # ---------------------------------------------------------
-@app.get("/debug-node")
-def debug_node():
-    import subprocess
-    p = subprocess.Popen(
-        ["node", "-v"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    out, err = p.communicate()
-    return {"stdout": out.strip(), "stderr": err.strip()}
+
 
 
 # ---------------------------------------------------------
@@ -274,7 +261,7 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
 
     # 8. Anchor on Sui
     try:
-        fairness_score = metrics.get("fairness_score")
+        fairness_score = metrics.get("fairness_score",0)
         sui_result = anchor_audit_on_sui(walrus_info, fairness_score)
     except Exception as e:
         sui_result = {"error": str(e)}
