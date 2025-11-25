@@ -1,13 +1,21 @@
 ############## STAGE 1: Build Walrus ################
 FROM rust:1.75-slim AS walrus-builder
 
-RUN apt-get update && apt-get install -y pkg-config libssl-dev curl git
+RUN apt-get update && apt-get install -y pkg-config libssl-dev curl
 
 WORKDIR /build
-RUN git clone https://github.com/walrus-move/walrus.git
-WORKDIR /build/walrus/walrus-cli
 
+# Download Walrus source tarball
+RUN curl -L https://github.com/MystenLabs/walrus/archive/refs/heads/main.tar.gz -o walrus.tar.gz \
+    && tar -xzf walrus.tar.gz \
+    && rm walrus.tar.gz
+
+# Enter the CLI crate
+WORKDIR /build/walrus-main/walrus-cli
+
+# Build Walrus CLI
 RUN cargo build --release
+
 
 ############## STAGE 2: Build Final App ##############
 FROM python:3.10-slim
@@ -20,8 +28,8 @@ RUN apt-get update && apt-get install -y \
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
 
-# Copy Walrus CLI
-COPY --from=walrus-builder /build/walrus/target/release/walrus /usr/local/bin/walrus
+# Copy Walrus CLI from builder
+COPY --from=walrus-builder /build/walrus-main/walrus-cli/target/release/walrus /usr/local/bin/walrus
 RUN chmod +x /usr/local/bin/walrus
 
 # Install Sui CLI
