@@ -29,26 +29,6 @@ RUN set -eux; \
     echo "Installed Sui CLI:"; sui --version
 
 
-######################### INSTALL WALRUS CLI #########################
-ENV WALRUS_VERSION=v0.4.1
-RUN curl -L "https://github.com/MystenLabs/walrus/releases/download/${WALRUS_VERSION}/walrus-linux-x64" \
-        -o /usr/local/bin/walrus && \
-    chmod +x /usr/local/bin/walrus && \
-    echo "Installed Walrus CLI:" && walrus --version
-
-
-######################### WALRUS CONFIG ##############################
-RUN mkdir -p /root/.config/walrus && \
-    curl -fSL https://docs.wal.app/setup/client_config.yaml \
-        -o /root/.config/walrus/client_config.yaml
-
-RUN echo "Walrus config loaded:" && walrus info || echo "Walrus info failed (still ok)"
-
-
-
-
-
-
 ######################### COPY APP ###############################
 WORKDIR /app
 COPY . /app

@@ -25,7 +25,6 @@ walrus_client = WalrusClient()
 load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "20"))
 
@@ -138,44 +137,34 @@ async def test_fairness(file: UploadFile = File(...)):
     df = pd.read_csv(file.file)
     metrics = run_fairness_audit(df)
     return metrics
+    
 
-
-@app.post("/debug-walrus-upload")
-async def debug_walrus_upload(file: UploadFile = File(...)):
+@app.get("/debug-walrus")
+def debug_walrus_upload():
     """
-    Test Walrus upload alone.
-    No SEAL, no Sui — only upload to Walrus.
+    Uploads a small sample text blob ("Hello Walrus!") to Walrus Testnet
+    to verify SDK upload works.
     """
-
-    # Validate file
-    if not file:
-        raise HTTPException(status_code=400, detail="Upload a file")
-
-    # Save temporarily
-    import tempfile, os
-
     try:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(await file.read())
-            tmp.flush()
-            tmp_path = tmp.name
-
-        # Upload to Walrus using Node uploader
-        try:
-            result = walrus_client.upload_blob(open(tmp_path, "rb").read(), filename=file.filename)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Walrus upload failed: {e}")
+        sample_data = b"Hello Walrus! This is a test blob."
+        result = walrus.upload_blob(sample_data, filename="debug.txt")
 
         return {
             "status": "success",
-            "filename": file.filename,
-            "walrus": result
+            "test_message": "Walrus upload working!",
+            "blobId": result.get("blobId"),
+            "objectId": result.get("objectId"),
+            "walrusURL": result.get("walrusURL"),
+            "objectURL": result.get("objectURL"),
+            "raw": result,
         }
 
-    finally:
-        if "tmp_path" in locals() and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-            
+    except Exception as e:
+        return {
+            "status": "error",
+            "detail": str(e),
+        }
+
 @app.post("/debug-seal-encrypt")
 async def debug_seal_encrypt(file: UploadFile = File(...)):
     """
