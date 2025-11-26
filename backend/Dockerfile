@@ -20,20 +20,22 @@ RUN npm install -g @walrus/cli
 RUN echo "=== Walrus CLI Installed ===" \
     && walrus --version || echo "Walrus CLI check failed"
 
-######################### INSTALL SUI CLI ########################
+# Install Sui CLI — robust method
 ENV SUI_VERSION=testnet-v1.61.1
+RUN set -eux; \
+    curl -L "https://github.com/MystenLabs/sui/releases/download/${SUI_VERSION}/sui-${SUI_VERSION}-ubuntu-x86_64.tgz" -o /tmp/sui.tgz; \
+    mkdir -p /tmp/sui-extract; \
+    tar -xzf /tmp/sui.tgz -C /tmp/sui-extract; \
+    # find the 'sui' binary anywhere under the extracted tree and move first match
+    SUI_BIN="$(find /tmp/sui-extract -type f -name sui -print -quit)"; \
+    if [ -z "$SUI_BIN" ]; then echo "ERROR: sui binary not found in archive" >&2; exit 1; fi; \
+    mv "$SUI_BIN" /usr/local/bin/sui; \
+    chmod +x /usr/local/bin/sui; \
+    # cleanup
+    rm -rf /tmp/sui.tgz /tmp/sui-extract; \
+    echo "Installed SUI from ${SUI_VERSION} -> /usr/local/bin/sui"; \
+    /usr/local/bin/sui --version
 
-RUN curl -L "https://github.com/MystenLabs/sui/releases/download/${SUI_VERSION}/sui-${SUI_VERSION}-ubuntu-x86_64.tgz" \
-    -o sui.tgz \
-    && tar -xzf sui.tgz \
-    && SUI_DIR=$(tar -tf sui.tgz | head -n 1 | cut -d/ -f1) \
-    && mv "$SUI_DIR/sui" /usr/local/bin/sui \
-    && chmod +x /usr/local/bin/sui \
-    && rm -rf sui.tgz "$SUI_DIR"
-
-# Debug
-RUN echo "=== Sui CLI Installed ===" \
-    && sui --version
 
 ######################### COPY APP ###############################
 WORKDIR /app
