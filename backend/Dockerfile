@@ -58,7 +58,7 @@ RUN if [ -d "/app/walrus-uploader" ]; then \
     fi
 
 ######################## PYTHON DEPENDENCIES #####################
-WORKDIR /app/backend
+WORKDIR /app
 
 # Install build tools for pysui-fastcrypto
 RUN apt-get update && apt-get install -y \
