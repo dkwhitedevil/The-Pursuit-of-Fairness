@@ -16,7 +16,7 @@ RUN node -v && npm -v
 RUN curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh
 
 # Add suiup to PATH
-ENV PATH="/root/.suiup/bin:${PATH}"
+ENV PATH="/root/.local/bin:${PATH}"
 
 ######################### INSTALL SUI + WALRUS ##########################################
 RUN suiup install sui
