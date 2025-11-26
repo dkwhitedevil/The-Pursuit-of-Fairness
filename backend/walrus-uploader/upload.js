@@ -4,16 +4,16 @@ import path from "path";
 import dotenv from "dotenv";
 dotenv.config();
 
-import { getFullnodeUrl, SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { fromHEX } from "@mysten/sui/utils";
 import { walrus } from "@mysten/walrus";
 
 async function upload(filePath) {
     const abs = path.resolve(filePath);
-    console.log("Uploading to Walrus Testnet:", abs);
+    console.log("Uploading to Walrus Testnet using OFFICIAL SDK:", abs);
 
-    // --- Load signer ---
+    // Load private key
     const PRIVATE_KEY = process.env.SUI_PRIVATE_KEY;
     if (!PRIVATE_KEY) {
         console.error("Missing SUI_PRIVATE_KEY in environment!");
@@ -22,10 +22,9 @@ async function upload(filePath) {
 
     const signer = Ed25519Keypair.fromSecretKey(fromHEX(PRIVATE_KEY));
 
-    // --- Build client ---
-    const client = new SuiJsonRpcClient({
+    // ---- Correct new Sui Client ----
+    const client = new SuiClient({
         url: getFullnodeUrl("testnet"),
-        network: "testnet",
     }).$extend(
         walrus({
             uploadRelay: {
