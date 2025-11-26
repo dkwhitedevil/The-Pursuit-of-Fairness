@@ -137,6 +137,51 @@ async def test_fairness(file: UploadFile = File(...)):
     metrics = run_fairness_audit(df)
     return metrics
 
+@app.post("/debug-seal-encrypt")
+async def debug_seal_encrypt(file: UploadFile = File(...)):
+    """
+    Test Seal encryption using a sample CSV file.
+    Does NOT upload to Walrus or Sui.
+    Just checks if seal_encrypt_node works.
+    """
+
+    # 1. Validate CSV
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files allowed.")
+
+    # 2. Save temporary CSV
+    tmp_path = os.path.join(TMP_DIR, f"seal_test_{int(time.time())}.csv")
+
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(await file.read())
+
+        # 3. Run Seal Encryption
+        identity = prepare_identity()
+        enc_identity, encrypted_b64, backup_key = seal_encrypt_node(tmp_path, identity)
+
+        # 4. Return output
+        return {
+            "status": "success",
+            "identity": enc_identity,
+            "encrypted_preview": encrypted_b64[:80] + "...",   # don't return full for safety
+            "backup_key_preview": backup_key[:80] + "...",
+            "length_encrypted_b64": len(encrypted_b64),
+            "length_backup_key_b64": len(backup_key),
+        }
+
+    except Exception as e:
+        return {
+            "status": "seal_error",
+            "error": str(e),
+        }
+
+    finally:
+        # 5. Cleanup
+        try:
+            os.remove(tmp_path)
+        except:
+            pass
 
 @app.get("/debug-node")
 def debug_node():
@@ -280,10 +325,10 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
 # ---------------------------------------------------------------
 # NEW: Check endpoints for Sui / Walrus / Seal / Node / Env
 # ---------------------------------------------------------------
-@app.get("")
+@app.get("/check/all")
 def check_all(run_seal_smoketest: bool = Query(False, description="If true, attempt a Seal encryption smoke test (can be slow)")):
     """
-    Run a suite of q/check/alluick checks: node, walrus, sui, seal (optional).
+    Run a suite of quick checks: node, walrus, sui, seal (optional).
     Returns a JSON report summarizing command outputs and health flags.
     """
     report = {
