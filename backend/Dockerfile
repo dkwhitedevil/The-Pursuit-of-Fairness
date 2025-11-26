@@ -12,40 +12,41 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 RUN node -v && npm -v
 
-######################### INSTALL SUIUP (official Walrus tool) ###########################
-RUN curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh
-
-# Add suiup to PATH
-ENV PATH="/root/.local/bin:${PATH}"
-
-######################### INSTALL SUI + WALRUS ##########################################
-RUN suiup install sui
-RUN suiup install walrus
-
-######################### CONFIGURE WALRUS ##############################################
-RUN mkdir -p /root/.config/walrus \
-    && curl -fSL https://docs.wal.app/setup/client_config.yaml \
-        -o /root/.config/walrus/client_config.yaml
-
-# Verify CLI installation
-RUN walrus info || echo "Walrus CLI config check failed (will fix in runtime)"
 
 
-# Install Sui CLI — robust method
+######################### INSTALL SUI CLI ############################
 ENV SUI_VERSION=testnet-v1.61.1
+
 RUN set -eux; \
     curl -L "https://github.com/MystenLabs/sui/releases/download/${SUI_VERSION}/sui-${SUI_VERSION}-ubuntu-x86_64.tgz" -o /tmp/sui.tgz; \
     mkdir -p /tmp/sui-extract; \
     tar -xzf /tmp/sui.tgz -C /tmp/sui-extract; \
-    # find the 'sui' binary anywhere under the extracted tree and move first match
     SUI_BIN="$(find /tmp/sui-extract -type f -name sui -print -quit)"; \
     if [ -z "$SUI_BIN" ]; then echo "ERROR: sui binary not found in archive" >&2; exit 1; fi; \
     mv "$SUI_BIN" /usr/local/bin/sui; \
     chmod +x /usr/local/bin/sui; \
-    # cleanup
     rm -rf /tmp/sui.tgz /tmp/sui-extract; \
-    echo "Installed SUI from ${SUI_VERSION} -> /usr/local/bin/sui"; \
-    /usr/local/bin/sui --version
+    echo "Installed Sui CLI:"; sui --version
+
+
+######################### INSTALL WALRUS CLI #########################
+ENV WALRUS_VERSION=v0.4.1
+RUN curl -L "https://github.com/MystenLabs/walrus/releases/download/${WALRUS_VERSION}/walrus-linux-x64" \
+        -o /usr/local/bin/walrus && \
+    chmod +x /usr/local/bin/walrus && \
+    echo "Installed Walrus CLI:" && walrus --version
+
+
+######################### WALRUS CONFIG ##############################
+RUN mkdir -p /root/.config/walrus && \
+    curl -fSL https://docs.wal.app/setup/client_config.yaml \
+        -o /root/.config/walrus/client_config.yaml
+
+RUN echo "Walrus config loaded:" && walrus info || echo "Walrus info failed (still ok)"
+
+
+
+
 
 
 ######################### COPY APP ###############################
