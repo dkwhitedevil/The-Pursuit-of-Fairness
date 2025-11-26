@@ -14,7 +14,7 @@ RUN node -v && npm -v
 
 ######################### INSTALL WALRUS CLI #####################
 # Official supported Walrus CLI (JavaScript version)
-RUN npm install -g @walrus/cli
+RUN npm install -g @walrus/cli@0.3.3
 
 # Debug
 RUN echo "=== Walrus CLI Installed ===" \

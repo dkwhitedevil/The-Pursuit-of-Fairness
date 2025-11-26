@@ -19,7 +19,9 @@ from services.fairness import run_fairness_audit
 from services.explain import generate_explanation
 from services.sui_client import anchor_audit_on_sui
 from services.seal_node_bridge import seal_encrypt_node, prepare_identity
+from services.walrus_client import WalrusClient   # make sure this import exists
 
+walrus_client = WalrusClient()
 load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -137,6 +139,43 @@ async def test_fairness(file: UploadFile = File(...)):
     metrics = run_fairness_audit(df)
     return metrics
 
+
+@app.post("/debug-walrus-upload")
+async def debug_walrus_upload(file: UploadFile = File(...)):
+    """
+    Test Walrus upload alone.
+    No SEAL, no Sui — only upload to Walrus.
+    """
+
+    # Validate file
+    if not file:
+        raise HTTPException(status_code=400, detail="Upload a file")
+
+    # Save temporarily
+    import tempfile, os
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(await file.read())
+            tmp.flush()
+            tmp_path = tmp.name
+
+        # Upload to Walrus using Node uploader
+        try:
+            result = walrus_client.upload_blob(open(tmp_path, "rb").read(), filename=file.filename)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Walrus upload failed: {e}")
+
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "walrus": result
+        }
+
+    finally:
+        if "tmp_path" in locals() and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+            
 @app.post("/debug-seal-encrypt")
 async def debug_seal_encrypt(file: UploadFile = File(...)):
     """
