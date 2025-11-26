@@ -43,11 +43,11 @@ COPY . /app
 
 RUN echo "=== Project Structure ===" && ls -R /app
 ######################## NODE BACKEND ############################
-WORKDIR /app
-RUN npm install @mysten/sui @mysten/seal
+WORKDIR /app/backend
+RUN npm install          # installs sui + walrus + dotenv
+RUN npm install @mysten/seal   # installs seal
+ENV NODE_PATH=/app/backend/node_modules
 
-# Ensure Node can discover modules
-ENV NODE_PATH=/app/node_modules
 
 ######################## WALRUS UPLOADER FIX #####################
 RUN if [ -d "/app/walrus-uploader" ]; then \
@@ -70,5 +70,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 ######################## START SERVER ############################
 ENV PORT=10000
 EXPOSE 10000
-
+WORKDIR /app/backend
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]

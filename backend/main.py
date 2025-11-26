@@ -280,10 +280,10 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
 # ---------------------------------------------------------------
 # NEW: Check endpoints for Sui / Walrus / Seal / Node / Env
 # ---------------------------------------------------------------
-@app.get("/check/all")
+@app.get("")
 def check_all(run_seal_smoketest: bool = Query(False, description="If true, attempt a Seal encryption smoke test (can be slow)")):
     """
-    Run a suite of quick checks: node, walrus, sui, seal (optional).
+    Run a suite of q/check/alluick checks: node, walrus, sui, seal (optional).
     Returns a JSON report summarizing command outputs and health flags.
     """
     report = {
