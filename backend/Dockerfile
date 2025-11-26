@@ -12,13 +12,24 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 RUN node -v && npm -v
 
-######################### INSTALL WALRUS CLI #####################
-# Official supported Walrus CLI (JavaScript version)
-RUN npm install -g @walrus/cli@0.3.3
+######################### INSTALL SUIUP (official Walrus tool) ###########################
+RUN curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh
 
-# Debug
-RUN echo "=== Walrus CLI Installed ===" \
-    && walrus --version || echo "Walrus CLI check failed"
+# Add suiup to PATH
+ENV PATH="/root/.suiup/bin:${PATH}"
+
+######################### INSTALL SUI + WALRUS ##########################################
+RUN suiup install sui
+RUN suiup install walrus
+
+######################### CONFIGURE WALRUS ##############################################
+RUN mkdir -p /root/.config/walrus \
+    && curl -fSL https://docs.wal.app/setup/client_config.yaml \
+        -o /root/.config/walrus/client_config.yaml
+
+# Verify CLI installation
+RUN walrus info || echo "Walrus CLI config check failed (will fix in runtime)"
+
 
 # Install Sui CLI — robust method
 ENV SUI_VERSION=testnet-v1.61.1

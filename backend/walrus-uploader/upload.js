@@ -3,77 +3,43 @@ import { execSync } from "child_process";
 import path from "path";
 
 /**
- * Clean CLI output and extract JSON safely.
- * Walrus sometimes returns:
- *   { ... }
- * or:
- *   [ { ... } ]
- * or includes logs before JSON.
- */
-function extractJson(output) {
-    // remove ANSI color codes
-    output = output.replace(/\x1b\[[0-9;]*m/g, "");
-
-    // Try to match array JSON
-    let match = output.match(/\[\s*{[\s\S]*}\s*\]/);
-    if (match) return JSON.parse(match[0]);
-
-    // Try to match single JSON object
-    match = output.match(/\{\s*"[^]*?\}/);
-    if (match) return JSON.parse(match[0]);
-
-    throw new Error("Could not detect Walrus JSON output:\n" + output);
-}
-
-/**
- * Normalize Walrus store output to our backend format
- */
-function parseWalrus(json) {
-    // Walrus may return array; take first object
-    const data = Array.isArray(json) ? json[0] : json;
-
-    const res = data.blobStoreResult || data;
-
-    if (!res)
-        throw new Error("Walrus JSON missing blobStoreResult");
-
-    const obj = res.newlyCreated?.blobObject || res.blobObject;
-
-    if (!obj)
-        throw new Error("Walrus JSON missing blobObject: " + JSON.stringify(res));
-
-    return {
-        blobId: obj.blobId || res.blobId,
-        objectId: obj.id,
-        walrusURL: `https://walruscan.com/testnet/blob/${obj.blobId}`,
-        objectURL: `https://walruscan.com/testnet/object/${obj.id}`
-    };
-}
-
-/**
- * Uploads a file via Walrus CLI
+ * Upload a file using the official Walrus CLI installed via suiup
  */
 function upload(filePath) {
     const abs = path.resolve(filePath);
     console.log("Uploading to Walrus Testnet:", abs);
 
     const relay = process.env.WALRUS_UPLOAD_RELAY;
-    let cmd;
+
+    let cmd = `walrus store ${abs} --epochs 2 --context testnet --json`;
 
     if (relay) {
         console.log(`Using WALRUS_UPLOAD_RELAY=${relay}`);
-        cmd = `walrus store ${abs} --upload-relay ${relay} --epochs 2 --json`;
-    } else {
-        console.log(`No WALRUS_UPLOAD_RELAY set. Using default Walrus endpoint.`);
-        cmd = `walrus store ${abs} --epochs 2 --json`;
+        cmd = `walrus store ${abs} --epochs 2 --context testnet --upload-relay ${relay} --json`;
     }
 
     try {
         const raw = execSync(cmd, { encoding: "utf8" });
-        const extracted = extractJson(raw);
-        const parsed = parseWalrus(extracted);
 
-        console.log(JSON.stringify(parsed));
+        // CLI already returns valid JSON with --json
+        const data = JSON.parse(raw);
+
+        // Normalize output
+        const blobId = data.blobId;
+        const objectId = data.objectId;
+
+        if (!blobId || !objectId) {
+            throw new Error("Walrus output missing blobId or objectId: " + raw);
+        }
+
+        const result = {
+            blobId,
+            objectId,
+            walrusURL: `https://walruscan.com/testnet/blob/${blobId}`,
+            objectURL: `https://walruscan.com/testnet/object/${objectId}`
+        };
+
+        console.log(JSON.stringify(result));
     } catch (err) {
         console.error("Upload failed!", err.message);
         process.exit(1);
