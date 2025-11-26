@@ -38,6 +38,8 @@ RUN echo "=== Project Structure ===" && ls -R /app
 WORKDIR /app
 RUN npm install          # installs sui + walrus + dotenv
 RUN npm install @mysten/seal   # installs seal
+RUN npm install @mysten/ @mysten/walrus-wasm # ensures latest walrus + walrus-wasm
+RUN npm install dotenv     # ensures latest dotenv
 ENV NODE_PATH=/app/node_modules
 
 

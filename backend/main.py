@@ -139,8 +139,36 @@ async def test_fairness(file: UploadFile = File(...)):
     return metrics
     
 
+
 @app.get("/debug-walrus")
 def debug_walrus_upload():
+    """
+    Upload a small static text blob to Walrus to verify end-to-end upload works.
+    This does NOT use user credentials, only tests Walrus upload.
+    """
+    try:
+        sample_data = b"Hello Walrus! This is a debug test blob."
+
+        # Call your Python Walrus wrapper
+        result = walrus.upload_blob(sample_data, filename="debug.txt")
+
+        return {
+            "status": "success",
+            "message": "Walrus SDK upload is working!",
+            "blobId": result.get("blobId"),
+            "objectId": result.get("objectId"),
+            "walrusURL": result.get("walrusURL"),
+            "objectURL": result.get("objectURL"),
+            "raw": result,
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "reason": "Walrus upload failed",
+            "detail": str(e),
+        }
+
     """
     Uploads a small sample text blob ("Hello Walrus!") to Walrus Testnet
     to verify SDK upload works.
