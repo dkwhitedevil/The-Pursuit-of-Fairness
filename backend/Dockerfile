@@ -42,11 +42,12 @@ WORKDIR /app
 COPY . /app
 
 RUN echo "=== Project Structure ===" && ls -R /app
-
 ######################## NODE BACKEND ############################
-WORKDIR /app/node-backend
-RUN npm init -y
+WORKDIR /app
 RUN npm install @mysten/sui @mysten/seal
+
+# Ensure Node can discover modules
+ENV NODE_PATH=/app/node_modules
 
 ######################## WALRUS UPLOADER FIX #####################
 RUN if [ -d "/app/walrus-uploader" ]; then \
@@ -63,7 +64,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential gcc g++ cargo rustc \
     && rm -rf /var/lib/apt/lists/*
-    
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 ######################## START SERVER ############################
