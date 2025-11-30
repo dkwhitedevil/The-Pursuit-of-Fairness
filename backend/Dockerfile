@@ -41,7 +41,7 @@ ENV SUI_CONFIG_DIR=/app/.sui/sui_config
 ENV SUI_CLIENT_CONFIG_DIR=/app/.sui/sui_config
 
 
-RUN echo "=== CHECK SUI WALLET IN CONTAINER ===" && ls -la /root/.sui/sui_config
+RUN echo "=== CHECK SUI WALLET IN CONTAINER ===" && ls -la /app/.sui/sui_config
 
 
 ######################### COPY APP ###############################
