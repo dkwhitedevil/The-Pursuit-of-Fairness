@@ -25,6 +25,23 @@ RUN set -eux; \
     chmod +x /usr/local/bin/sui; \
     rm -rf /tmp/sui.tgz /tmp/sui-extract; \
     echo "Installed Sui CLI:"; sui --version
+######################### SUI WALLET COPY ############################
+# Create Sui config directory inside container
+RUN mkdir -p /root/.sui/sui_config
+
+# Copy your wallet files into container
+COPY backend/sui_config/client.yaml /root/.sui/sui_config/client.yaml
+COPY backend/sui_config/sui.aliases /root/.sui/sui_config/sui.aliases
+COPY backend/sui_config/sui.keystore /root/.sui/sui_config/sui.keystore
+
+# Ensure proper permissions
+RUN chmod 600 /root/.sui/sui_config/sui.keystore
+RUN chmod 644 /root/.sui/sui_config/client.yaml
+RUN chmod 644 /root/.sui/sui_config/sui.aliases
+
+# Debug: print wallet existence
+RUN echo "=== CHECK SUI WALLET IN CONTAINER ===" && ls -la /root/.sui/sui_config
+
 
 ######################### COPY APP ###############################
 WORKDIR /app
