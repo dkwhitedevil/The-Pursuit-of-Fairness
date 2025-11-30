@@ -29,7 +29,8 @@ logging.basicConfig(level=logging.INFO)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "20"))
 
-app = FastAPI(title="The Pursuit of Fairness - Backend", version="1.0.0")
+app = FastAPI(title="The Pursuit of Fairness", version="1.0.0", max_request_size=100*1024*1024)
+
 
 app.add_middleware(
     CORSMiddleware,

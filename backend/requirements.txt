@@ -13,8 +13,9 @@ fairlearn==0.10.0
 aif360==0.6.1
 
 # SUI blockchain
-pysui==0.93.0
+
 pysui-fastcrypto==0.7.0
+pysui==0.60.2
 
 # Node bridge / utilities
 loguru

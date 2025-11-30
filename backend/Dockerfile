@@ -87,4 +87,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV PORT=10000
 EXPOSE 10000
 WORKDIR /app
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]
+CMD [
+  "uvicorn",
+  "main:app",
+  "--host", "0.0.0.0",
+  "--port", "10000",
+  "--limit-max-request", "100000000"
+]
+
