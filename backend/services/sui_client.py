@@ -61,7 +61,7 @@ def anchor_audit_on_sui(walrus_info: Dict[str, Any], fairness_score: float):
         from pysui.sui.sui_crypto import SuiPrivateKey
         from pysui.sui.sui_txn import SyncTransaction
 
-        client = SuiClient(SUI_RPC)
+        client = SuiClient()
 
         # Load private key
         key_bytes = bytes.fromhex(SUI_PRIVATE_KEY)
