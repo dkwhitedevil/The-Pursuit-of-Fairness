@@ -215,8 +215,10 @@ pytest -q
 
 ## License
 
-Check repository root or consult the project owner for license details.
+- **License:** This project is licensed under the MIT License. See the `LICENSE` file at the repository root for the full license text and permissions.
 
 ## Contact
 
-For questions about deploying to a particular provider, attaching domains, or automating deploys, open an issue or reach out to the project maintainer.
+- **Questions & deployment help:** Open an issue on this repository: https://github.com/dkwhitedevil/The-Pursuit-of-Fairness/issues
+- **Project maintainer:** GitHub user `dkwhitedevil` — https://github.com/dkwhitedevil. You can contact the maintainer via the GitHub profile (profile contact methods or by creating an issue and mentioning `@dkwhitedevil`).
+- **Security / urgent matters:** If you discover a security issue or a leaked secret, open an issue titled "SECURITY" and rotate affected keys immediately. If an email address is listed on the maintainer's GitHub profile you may use that for urgent contact.
