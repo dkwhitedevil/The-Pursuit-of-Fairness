@@ -44,7 +44,7 @@ async function upload(filePath) {
         const output = {
             blobId: x.blobId,
             objectId: x.id,
-            walrusURL: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${x.blobId}`,
+            walrusURL: `https://walruscan.com/testnet/blob//${x.blobId}`,
             objectURL: `https://walruscan.com/testnet/object/${x.id}`
         };
         console.log(JSON.stringify(output));
