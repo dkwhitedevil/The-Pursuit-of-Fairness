@@ -58,14 +58,14 @@ def anchor_audit_on_sui(walrus_info: Dict[str, Any], fairness_score: float):
     try:
         # Import newest pysui API
         from pysui.sui.sui_clients.sync_client import SuiClient
-        from pysui.sui.sui_crypto import Ed25519PrivateKey
+        from pysui.sui.sui_crypto import SuiPrivateKey
         from pysui.sui.sui_txn import SyncTransaction
 
         client = SuiClient(SUI_RPC)
 
         # Load private key
         key_bytes = bytes.fromhex(SUI_PRIVATE_KEY)
-        priv = Ed25519PrivateKey.from_private_bytes(key_bytes)
+        priv = SuiPrivateKey(key_bytes)
 
         # Build transaction
         tx = SyncTransaction(client)
