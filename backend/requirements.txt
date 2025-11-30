@@ -21,6 +21,7 @@ pysui==0.93.0
 loguru
 tqdm
 joblib
+pynacl
 
 # Required for FastAPI internals
 starlette==0.27.0
