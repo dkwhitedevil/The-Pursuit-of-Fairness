@@ -71,7 +71,7 @@ export default function UploadSection() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("http://localhost:8000/upload-dataset", {
+      const res = await fetch("https://the-pursuit-of-fairness.onrender.com/upload-dataset", {
         method: "POST",
         body: formData,
       });
