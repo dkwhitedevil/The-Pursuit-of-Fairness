@@ -13,7 +13,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN node -v && npm -v
 
 ######################### INSTALL SUI CLI ############################
-ENV SUI_VERSION=testnet-v1.61.1
+ENV SUI_VERSION=testnet-v1.61.2
 
 RUN set -eux; \
     curl -L "https://github.com/MystenLabs/sui/releases/download/${SUI_VERSION}/sui-${SUI_VERSION}-ubuntu-x86_64.tgz" -o /tmp/sui.tgz; \
@@ -25,21 +25,22 @@ RUN set -eux; \
     chmod +x /usr/local/bin/sui; \
     rm -rf /tmp/sui.tgz /tmp/sui-extract; \
     echo "Installed Sui CLI:"; sui --version
+
 ######################### SUI WALLET COPY ############################
-# Create Sui config directory inside container
-RUN mkdir -p /root/.sui/sui_config
+RUN mkdir -p /app/.sui/sui_config
 
-# Copy your wallet files into container
-COPY sui_config/client.yaml /root/.sui/sui_config/client.yaml
-COPY sui_config/sui.aliases /root/.sui/sui_config/sui.aliases
-COPY sui_config/sui.keystore /root/.sui/sui_config/sui.keystore
+COPY sui_config/client.yaml /app/.sui/sui_config/client.yaml
+COPY sui_config/sui.aliases /app/.sui/sui_config/sui.aliases
+COPY sui_config/sui.keystore /app/.sui/sui_config/sui.keystore
 
-# Ensure proper permissions
-RUN chmod 600 /root/.sui/sui_config/sui.keystore
-RUN chmod 644 /root/.sui/sui_config/client.yaml
-RUN chmod 644 /root/.sui/sui_config/sui.aliases
+RUN chmod 600 /app/.sui/sui_config/sui.keystore
+RUN chmod 644 /app/.sui/sui_config/client.yaml
+RUN chmod 644 /app/.sui/sui_config/sui.aliases
 
-# Debug: print wallet existence
+ENV SUI_CONFIG_DIR=/app/.sui/sui_config
+ENV SUI_CLIENT_CONFIG_DIR=/app/.sui/sui_config
+
+
 RUN echo "=== CHECK SUI WALLET IN CONTAINER ===" && ls -la /root/.sui/sui_config
 
 
