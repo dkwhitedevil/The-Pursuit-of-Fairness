@@ -19,12 +19,13 @@ from services.fairness import run_fairness_audit
 from services.explain import generate_explanation
 from services.sui_client import anchor_audit_on_sui
 from services.seal_node_bridge import seal_encrypt_node, prepare_identity
-from services.walrus_client import WalrusClient   # make sure this import exists
+from services.walrus_client import WalrusClient
 
-walrus_client = WalrusClient()
+# Initialize
 load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "20"))
 
@@ -40,6 +41,9 @@ app.add_middleware(
 
 TMP_DIR = os.path.join(os.getcwd(), "tmp")
 os.makedirs(TMP_DIR, exist_ok=True)
+
+# Walrus client instance (uses services/walrus_client.py)
+walrus_client = WalrusClient()
 
 
 # ---------------------------------------------------------------
@@ -92,35 +96,24 @@ def remove_file_safe(path: str):
 # ---------------------------------------------------------------
 def upload_bundle_to_walrus(bundle_path: str) -> Dict[str, Any]:
     """
-    Uses the JS uploader script at walrus-uploader/upload.js.
-    Returns parsed JSON output (uploader prints JSON as last line) or raises RuntimeError.
+    Uploads encrypted bundle file using WalrusClient() (services.walrus_client.WalrusClient).
+    Returns a dict with blobId/objectId/walrusURL/objectURL or raises RuntimeError.
     """
     try:
-        result = subprocess.run(
-            ["node", "walrus-uploader/upload.js", bundle_path],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
+        with open(bundle_path, "rb") as f:
+            data = f.read()
 
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Walrus uploader failed:\n{result.stdout}\n{result.stderr}"
-            )
-
-        try:
-            # Walrus upload.js always prints JSON as final line
-            data = json.loads(result.stdout.strip().split("\n")[-1])
-            return data
-        except Exception:
-            raise RuntimeError(
-                f"Walrus uploader did not output valid JSON:\n{result.stdout}\n{result.stderr}"
-            )
-
+        result = walrus_client.upload_blob(data, filename=os.path.basename(bundle_path))
+        # validate expected keys
+        if not isinstance(result, dict) or "blobId" not in result:
+            raise RuntimeError(f"Unexpected upload result: {result}")
+        return result
     except Exception as e:
-        raise RuntimeError(f"Walrus upload error: {e}")
+        raise RuntimeError(f"Walrus upload failed: {str(e)}")
 
 
 # ---------------------------------------------------------------
-# API — Main Pipeline (existing endpoints preserved)
+# API — Main Pipeline (endpoints)
 # ---------------------------------------------------------------
 @app.get("/audit/proofs")
 def get_all_proofs():
@@ -137,61 +130,7 @@ async def test_fairness(file: UploadFile = File(...)):
     df = pd.read_csv(file.file)
     metrics = run_fairness_audit(df)
     return metrics
-    
 
-
-@app.get("/debug-walrus")
-def debug_walrus_upload():
-    """
-    Upload a small static text blob to Walrus to verify end-to-end upload works.
-    This does NOT use user credentials, only tests Walrus upload.
-    """
-    try:
-        sample_data = b"Hello Walrus! This is a debug test blob."
-
-        # Call your Python Walrus wrapper
-        result = walrus.upload_blob(sample_data, filename="debug.txt")
-
-        return {
-            "status": "success",
-            "message": "Walrus SDK upload is working!",
-            "blobId": result.get("blobId"),
-            "objectId": result.get("objectId"),
-            "walrusURL": result.get("walrusURL"),
-            "objectURL": result.get("objectURL"),
-            "raw": result,
-        }
-
-    except Exception as e:
-        return {
-            "status": "error",
-            "reason": "Walrus upload failed",
-            "detail": str(e),
-        }
-
-    """
-    Uploads a small sample text blob ("Hello Walrus!") to Walrus Testnet
-    to verify SDK upload works.
-    """
-    try:
-        sample_data = b"Hello Walrus! This is a test blob."
-        result = walrus.upload_blob(sample_data, filename="debug.txt")
-
-        return {
-            "status": "success",
-            "test_message": "Walrus upload working!",
-            "blobId": result.get("blobId"),
-            "objectId": result.get("objectId"),
-            "walrusURL": result.get("walrusURL"),
-            "objectURL": result.get("objectURL"),
-            "raw": result,
-        }
-
-    except Exception as e:
-        return {
-            "status": "error",
-            "detail": str(e),
-        }
 
 @app.post("/debug-seal-encrypt")
 async def debug_seal_encrypt(file: UploadFile = File(...)):
@@ -200,53 +139,61 @@ async def debug_seal_encrypt(file: UploadFile = File(...)):
     Does NOT upload to Walrus or Sui.
     Just checks if seal_encrypt_node works.
     """
-
-    # 1. Validate CSV
     if not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files allowed.")
 
-    # 2. Save temporary CSV
     tmp_path = os.path.join(TMP_DIR, f"seal_test_{int(time.time())}.csv")
 
     try:
         with open(tmp_path, "wb") as f:
             f.write(await file.read())
 
-        # 3. Run Seal Encryption
         identity = prepare_identity()
         enc_identity, encrypted_b64, backup_key = seal_encrypt_node(tmp_path, identity)
 
-        # 4. Return output
         return {
             "status": "success",
             "identity": enc_identity,
-            "encrypted_preview": encrypted_b64[:80] + "...",   # don't return full for safety
+            "encrypted_preview": encrypted_b64[:80] + "...",
             "backup_key_preview": backup_key[:80] + "...",
             "length_encrypted_b64": len(encrypted_b64),
             "length_backup_key_b64": len(backup_key),
         }
 
     except Exception as e:
-        return {
-            "status": "seal_error",
-            "error": str(e),
-        }
+        return {"status": "seal_error", "error": str(e)}
 
     finally:
-        # 5. Cleanup
-        try:
-            os.remove(tmp_path)
-        except:
-            pass
+        remove_file_safe(tmp_path)
+
 
 @app.get("/debug-node")
 def debug_node():
     return run_command(["node", "-v"])
 
 
-@app.get("/debug-walrus")
-def debug_walrus():
-    return run_command(["walrus", "--version"])
+
+
+@app.get("/debug-walrus-upload")
+def debug_walrus_upload():
+    """
+    Upload a small static blob using the Python Walrus wrapper to ensure pipeline works.
+    """
+    try:
+        sample_data = b"Hello Walrus! This is a debug test blob."
+        result = walrus_client.upload_blob(sample_data, filename="debug.txt")
+
+        return {
+            "status": "success",
+            "message": "Walrus upload working!",
+            "blobId": result.get("blobId"),
+            "objectId": result.get("objectId"),
+            "walrusURL": result.get("walrusURL"),
+            "objectURL": result.get("objectURL"),
+            "raw": result,
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 @app.get("/debug-sui")
@@ -259,14 +206,38 @@ def debug_sui():
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/check/walrus")
+def check_walrus():
+    """
+    Fully tests Walrus REST uploader on Render.
+    Uploads a tiny blob: "Render Walrus Check".
+    """
+    try:
+        test_data = b"Render Walrus Check"
+        result = walrus_client.upload_blob(test_data, filename="render_test.txt")
 
+        return {
+            "status": "success",
+            "message": "Walrus REST upload working on Render!",
+            "blobId": result.get("blobId"),
+            "objectId": result.get("objectId"),
+            "walrusURL": result.get("walrusURL"),
+            "objectURL": result.get("objectURL"),
+            "raw": result
+        }
+
+    except Exception as e:
+        return {
+            "status": "failed",
+            "error": str(e)
+        }
+
+    
 # ---------------------------------------------------------
 # DEBUG: Show important backend paths
 # ---------------------------------------------------------
 @app.get("/debug-paths")
 def debug_paths():
-    import os
-
     backend_root = os.getcwd()
     return {
         "cwd": backend_root,
@@ -278,6 +249,7 @@ def debug_paths():
             "main.py": os.path.exists(os.path.join(backend_root, "main.py")),
             "node_modules_root": os.path.exists(os.path.join(backend_root, "node_modules")),
             "node_modules_backend": os.path.exists(os.path.join(backend_root, "backend", "node_modules")),
+            "walrus_client_exists": os.path.exists(os.path.join(backend_root, "services", "walrus_client.py")),
         }
     }
 
@@ -384,20 +356,18 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
 @app.get("/check/all")
 def check_all(run_seal_smoketest: bool = Query(False, description="If true, attempt a Seal encryption smoke test (can be slow)")):
     """
-    Run a suite of quick checks: node, walrus, sui, seal (optional).
+    Run a suite of quick checks: node, walrus_uploader, sui, seal (optional).
     Returns a JSON report summarizing command outputs and health flags.
     """
     report = {
         "node": run_command(["node", "-v"]),
         "npm": run_command(["npm", "-v"]),
-        "walrus": run_command(["walrus", "--version"]),
+        "walrus_uploader": run_command(["node", "walrus-uploader/upload.js"], timeout=5),
         "sui": run_command(["sui", "--version"]),
         "cwd": os.getcwd(),
     }
 
     if run_seal_smoketest:
-        # Attempt a lightweight Seal smoke test using the existing python bridge.
-        # It will call prepare_identity() and then try to encrypt a tiny temp file.
         try:
             pid = prepare_identity()
             # make a tiny temp file
@@ -408,7 +378,6 @@ def check_all(run_seal_smoketest: bool = Query(False, description="If true, atte
 
             try:
                 sid, enc_b64, backup = seal_encrypt_node(tmp_path, pid)
-                # on success remove temp
                 report["seal_smoke"] = {"ok": True, "audit_id": sid, "backup_key_present": bool(backup)}
             except Exception as e:
                 report["seal_smoke"] = {"ok": False, "error": str(e)}
@@ -429,39 +398,6 @@ def check_node():
 def check_npm():
     return run_command(["npm", "-v"])
 
-
-@app.get("/check/walrus/version")
-def check_walrus_version():
-    return run_command(["walrus", "--version"])
-
-
-@app.post("/check/walrus/upload-test")
-def check_walrus_upload_test(file_path: Optional[str] = Query(None, description="Path to a file inside container to upload (binary). If not provided, a small temp file is used.")):
-    """
-    Try running the walrus uploader script with a small test file.
-    This DOES NOT delete anything from walrus; it simply attempts upload and returns uploader output.
-    Provide a path that exists inside the container, or leave blank to use a generated temp file.
-    """
-    temp_created = False
-    used_path = file_path
-    if not file_path:
-        # create a tiny temp file to upload
-        fd, p = tempfile.mkstemp(prefix="walrus_test_", text=False)
-        os.close(fd)
-        with open(p, "wb") as f:
-            f.write(b"walrus-upload-test")
-        temp_created = True
-        used_path = p
-
-    try:
-        cmd_result = run_command(["node", "walrus-uploader/upload.js", used_path], timeout=60)
-        # return uploader stdout/stderr; caller is responsible for interpreting results
-        return {"file_used": used_path, "result": cmd_result}
-    finally:
-        if temp_created:
-            remove_file_safe(used_path)
-
-
 @app.get("/check/sui/active-address")
 def check_sui_active_address():
     return run_command(["sui", "client", "active-address"])
@@ -474,16 +410,11 @@ def check_sui_version():
 
 @app.post("/check/seal/smoke")
 def check_seal_smoke_test():
-    """
-    Explicit seal smoke test: will prepare identity and attempt to encrypt a tiny payload.
-    Useful for verifying the Node bridge and installed JS deps are functional.
-    """
     try:
         pid = prepare_identity()
     except Exception as e:
         return {"ok": False, "error": f"prepare_identity failed: {e}"}
 
-    # tiny input
     with tempfile.NamedTemporaryFile("w+b", delete=False) as tmp:
         tmp.write(b"seal-smoke-test")
         tmp.flush()
@@ -491,7 +422,6 @@ def check_seal_smoke_test():
 
     try:
         audit_id, encrypted_b64, backup_key = seal_encrypt_node(tmp_path, pid)
-        # do not keep the encrypted bytes on disk
         return {"ok": True, "audit_id": audit_id, "backup_key_present": bool(backup_key)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -501,10 +431,6 @@ def check_seal_smoke_test():
 
 @app.get("/check/env")
 def check_env():
-    """
-    Return a small summary of environment variables that are commonly needed.
-    Avoid returning sensitive secrets.
-    """
     env_keys = ["HOME", "USER", "PATH", "SUI_RPC_URL", "FRONTEND_URL"]
     env = {k: os.environ.get(k, None) for k in env_keys}
     return {"cwd": os.getcwd(), "env": env}

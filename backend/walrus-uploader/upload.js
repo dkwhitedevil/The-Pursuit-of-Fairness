@@ -1,64 +1,51 @@
 #!/usr/bin/env node
 import fs from "fs";
 import path from "path";
-import dotenv from "dotenv";
-dotenv.config();
 
-import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { fromHEX } from "@mysten/sui/utils";
-import { walrus } from "@mysten/walrus";
+const fetchFn = global.fetch ?? (await import("node-fetch")).default;
 
 async function upload(filePath) {
     const abs = path.resolve(filePath);
-    console.log("Uploading to Walrus Testnet using OFFICIAL SDK:", abs);
+    console.log("Uploading to Walrus Publisher:", abs);
 
-    // Load private key
-    const PRIVATE_KEY = process.env.SUI_PRIVATE_KEY;
-    if (!PRIVATE_KEY) {
-        console.error("Missing SUI_PRIVATE_KEY in environment!");
+    const publisher =
+        process.env.WALRUS_PUBLISHER ||
+        "https://publisher.walrus-testnet.walrus.space";
+
+    const fileBuffer = fs.readFileSync(abs);
+
+    const url = `${publisher}/v1/blobs?epochs=2`;
+
+    const res = await fetchFn(url, {
+        method: "PUT",
+        body: fileBuffer,
+        headers: {
+            "Content-Type": "application/octet-stream"
+        }
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+        console.error("HTTP Error:", res.status, res.statusText);
+        console.error("Response:", text);
         process.exit(1);
     }
 
-    const signer = Ed25519Keypair.fromSecretKey(fromHEX(PRIVATE_KEY));
+    const json = JSON.parse(text);
 
-    // ---- Correct new Sui Client ----
-    const client = new SuiClient({
-        url: getFullnodeUrl("testnet"),
-    }).$extend(
-        walrus({
-            uploadRelay: {
-                host: process.env.WALRUS_UPLOAD_RELAY,
-            },
-        })
-    );
-
-    const data = fs.readFileSync(abs);
-
-    try {
-        const result = await client.walrus.writeBlob({
-            blob: data,
-            epochs: 2,
-            deletable: false,
-            signer,
-        });
-
-        const out = {
-            blobId: result.blobId,
-            objectId: result.id,
-            walrusURL: `https://walruscan.com/testnet/blob/${result.blobId}`,
-            objectURL: `https://walruscan.com/testnet/object/${result.id}`,
+    if (json.newlyCreated) {
+        const x = json.newlyCreated.blobObject;
+        const output = {
+            blobId: x.blobId,
+            objectId: x.id,
+            walrusURL: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${x.blobId}`,
+            objectURL: `https://walruscan.com/testnet/object/${x.id}`
         };
-
-        console.log(JSON.stringify(out));
-    } catch (err) {
-        console.error("Walrus upload failed:", err);
-        process.exit(1);
+        console.log(JSON.stringify(output));
+    } else {
+        console.log(JSON.stringify(json));  
     }
 }
 
-if (process.argv[2]) upload(process.argv[2]);
-else {
-    console.error("Usage: node upload.js <file>");
-    process.exit(1);
-}
+upload(process.argv[2]);
