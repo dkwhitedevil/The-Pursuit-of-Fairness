@@ -4,8 +4,6 @@
 
 **Made for the Walrus Haulout Hackathon 2025 — Provably Authentic (Truth Engine + Trust Oracle) track.**
 
-Built for the Walrus Haulout Hackathon 2025 — Provably Authentic (Truth Engine + Trust Oracle) track.
-
 Comprehensive toolkit for dataset fairness auditing, explanation, proof anchoring (Sui), and secure upload. This repository contains a Next.js frontend, a FastAPI backend, Move modules (in `move_modules/`), and tooling for interacting with Walrus and Sui.
 
 This README documents how to run the project locally, how the pieces fit together, and how to publish the app publicly (frontend -> Vercel, backend -> Render or similar). It also covers Docker usage, Ollama integration, and security best-practices.
