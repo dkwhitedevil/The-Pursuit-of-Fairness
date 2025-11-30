@@ -1,8 +1,27 @@
 # The Pursuit of Fairness
 
+![Walrus Haulout Hackathon 2025](https://img.shields.io/badge/Walrus%20Haulout-2025-blue)
+
+**Made for the Walrus Haulout Hackathon 2025 — Provably Authentic (Truth Engine + Trust Oracle) track.**
+
+Built for the Walrus Haulout Hackathon 2025 — Provably Authentic (Truth Engine + Trust Oracle) track.
+
 Comprehensive toolkit for dataset fairness auditing, explanation, proof anchoring (Sui), and secure upload. This repository contains a Next.js frontend, a FastAPI backend, Move modules (in `move_modules/`), and tooling for interacting with Walrus and Sui.
 
 This README documents how to run the project locally, how the pieces fit together, and how to publish the app publicly (frontend -> Vercel, backend -> Render or similar). It also covers Docker usage, Ollama integration, and security best-practices.
+
+Hackathon context — Provably Authentic
+------------------------------------
+This project was developed as an entry for the Walrus Haulout Hackathon 2025 under the "Provably Authentic (Truth Engine + Trust Oracle)" track.
+
+Under this track we focus on authenticity on-chain: verifying provenance of media, creating prediction markets for truth, and designing AI trust oracles that can prove source, training data provenance, or model reliability. The project explores systems that turn data into value — combining decentralized storage (Walrus), tamper-evident anchoring (Sui), and explainable fairness audits.
+
+Key goals for the track:
+- Verify provenance of media and datasets and anchor proofs on-chain.
+- Build prediction markets or incentives that reward accurate reporting and oracle reliability.
+- Create AI trust oracles that produce auditable explanations about models and datasets.
+- Integrate storage, verification, and economic incentives to align truth and provenance.
+
 
 Contents
 - Architecture overview
