@@ -30,9 +30,9 @@ RUN set -eux; \
 RUN mkdir -p /root/.sui/sui_config
 
 # Copy your wallet files into container
-COPY backend/sui_config/client.yaml /root/.sui/sui_config/client.yaml
-COPY backend/sui_config/sui.aliases /root/.sui/sui_config/sui.aliases
-COPY backend/sui_config/sui.keystore /root/.sui/sui_config/sui.keystore
+COPY sui_config/client.yaml /root/.sui/sui_config/client.yaml
+COPY sui_config/sui.aliases /root/.sui/sui_config/sui.aliases
+COPY sui_config/sui.keystore /root/.sui/sui_config/sui.keystore
 
 # Ensure proper permissions
 RUN chmod 600 /root/.sui/sui_config/sui.keystore
