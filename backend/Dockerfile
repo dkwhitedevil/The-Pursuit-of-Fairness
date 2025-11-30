@@ -12,8 +12,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 RUN node -v && npm -v
 
-
-
 ######################### INSTALL SUI CLI ############################
 ENV SUI_VERSION=testnet-v1.61.1
 
@@ -28,20 +26,26 @@ RUN set -eux; \
     rm -rf /tmp/sui.tgz /tmp/sui-extract; \
     echo "Installed Sui CLI:"; sui --version
 
-
 ######################### COPY APP ###############################
 WORKDIR /app
 COPY . /app
 
 RUN echo "=== Project Structure ===" && ls -R /app
+
 ######################## NODE BACKEND ############################
 WORKDIR /app
-RUN npm install          # installs sui + walrus + dotenv
-RUN npm install @mysten/seal   # installs seal
-RUN npm install @mysten/walrus @mysten/walrus-wasm # ensures latest walrus + walrus-wasm
-RUN npm install dotenv     # ensures latest dotenv
-ENV NODE_PATH=/app/node_modules
+RUN npm install
+RUN npm install @mysten/seal
+# ❌ REMOVE: Walrus CLI / WASM SDK (not needed)
+# RUN npm install @mysten/walrus @mysten/walrus-wasm
+# ❌ REMOVE old mysten walrus libs
+# --------------------------------------
 
+# ✅ ADD: Node Fetch (required for REST uploader)
+RUN npm install node-fetch
+
+RUN npm install dotenv
+ENV NODE_PATH=/app/node_modules
 
 ######################## WALRUS UPLOADER FIX #####################
 RUN if [ -d "/app/walrus-uploader" ]; then \
@@ -54,7 +58,7 @@ RUN if [ -d "/app/walrus-uploader" ]; then \
 ######################## PYTHON DEPENDENCIES #####################
 WORKDIR /app
 
-# Install build tools for pysui-fastcrypto
+# Build tools are still needed (you said not to remove)
 RUN apt-get update && apt-get install -y \
     build-essential gcc g++ cargo rustc \
     && rm -rf /var/lib/apt/lists/*
