@@ -13,7 +13,7 @@ def _to_hex_from_u8_list(u8_list):
 
 def find_proofs_recursively(obj: dict) -> List[Dict]:
     """
-    Walk nested JSON returned by the Sui object query and extract proof entries.
+    Walk ne1sted JSON returned by the Sui object query and extract proof entries.
     We consider objects containing keys 'bundle_hash' 'fairness_score' 'timestamp' to be proofs.
     """
     proofs = []
