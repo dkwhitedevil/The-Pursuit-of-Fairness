@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from services.sui_reader import read_audit_table
 from services.fairness import run_fairness_audit
 from services.explain import generate_explanation
-from services.sui_client import anchor_audit_on_sui
+from services.sui_signer import anchor_audit_on_sui
 from services.seal_node_bridge import seal_encrypt_node, prepare_identity
 from services.walrus_client import WalrusClient
 
@@ -305,15 +305,18 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
     bundle_bytes = json.dumps(bundle).encode("utf-8")
 
     # 6. Seal Encryption (Node)
+    # 6. Seal Encryption (Node)
     try:
-        audit_id = prepare_identity()
+        audit_id = str(int(time.time()))   # UNIQUE AUDIT ID
+        seal_identity = prepare_identity()
 
         temp_input = os.path.join(TMP_DIR, f"bundle_{audit_id}.json")
         with open(temp_input, "wb") as f:
             f.write(bundle_bytes)
 
-        audit_id, encrypted_b64, backup_key = seal_encrypt_node(temp_input, audit_id)
+        seal_identity, encrypted_b64, backup_key = seal_encrypt_node(temp_input, seal_identity)
         background.add_task(remove_file_safe, temp_input)
+
         encrypted_path = os.path.join(TMP_DIR, f"enc_{audit_id}.bin")
         with open(encrypted_path, "wb") as f:
             f.write(base64.b64decode(encrypted_b64))
@@ -343,7 +346,8 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
 
     return {
         "status": "success",
-        "encrypted_identity": audit_id,
+        "audit_id": audit_id,
+        "encrypted_identity": seal_identity,
         "bundle_metadata": bundle,
         "walrus": walrus_info,
         "sui": sui_result,
