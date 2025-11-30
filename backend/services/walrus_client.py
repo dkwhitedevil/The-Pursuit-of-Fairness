@@ -1,16 +1,17 @@
-import subprocess
-import tempfile
-import json
-import os
 from pathlib import Path
+import subprocess, tempfile, json, os
 
-NODE_UPLOADER = Path(__file__).parent / "walrus-uploader" / "upload.js"
+# Always correct, even inside Docker
+NODE_UPLOADER = Path("/app/walrus-uploader/upload.js")
 
 class WalrusClient:
     def upload_blob(self, bytes_data: bytes, filename="blob.bin"):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
         tmp.write(bytes_data)
         tmp.close()
+
+        if not NODE_UPLOADER.exists():
+            raise RuntimeError(f"Node uploader not found at {NODE_UPLOADER}")
 
         cmd = ["node", str(NODE_UPLOADER), tmp.name]
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
