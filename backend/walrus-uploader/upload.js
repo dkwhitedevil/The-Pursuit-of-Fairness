@@ -5,8 +5,8 @@ import path from "path";
 const fetchFn = global.fetch ?? (await import("node-fetch")).default;
 
 async function upload(filePath) {
+
     const abs = path.resolve(filePath);
-    console.log("Uploading to Walrus Publisher:", abs);
 
     const publisher =
         process.env.WALRUS_PUBLISHER ||
@@ -27,8 +27,13 @@ async function upload(filePath) {
     const text = await res.text();
 
     if (!res.ok) {
-        console.error("HTTP Error:", res.status, res.statusText);
-        console.error("Response:", text);
+        // error must also be JSON or exit(1) without printing extra logs
+        console.error(JSON.stringify({
+            status: "error",
+            http_status: res.status,
+            message: res.statusText,
+            response: text
+        }));
         process.exit(1);
     }
 
@@ -44,7 +49,7 @@ async function upload(filePath) {
         };
         console.log(JSON.stringify(output));
     } else {
-        console.log(JSON.stringify(json));  
+        console.log(JSON.stringify(json));
     }
 }
 

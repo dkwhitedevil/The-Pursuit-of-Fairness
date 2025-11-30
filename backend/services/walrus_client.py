@@ -1,7 +1,6 @@
 from pathlib import Path
 import subprocess, tempfile, json, os
 
-# Always correct, even inside Docker
 NODE_UPLOADER = Path("/app/walrus-uploader/upload.js")
 
 class WalrusClient:
@@ -18,7 +17,18 @@ class WalrusClient:
 
         os.remove(tmp.name)
 
-        if not result.stdout:
-            raise RuntimeError("Upload failed: " + result.stderr)
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
 
-        return json.loads(result.stdout)
+        if not stdout:
+            raise RuntimeError(f"Upload failed: {stderr}")
+
+        # ---- Render fix: parse ONLY the last JSON line ----
+        last_line = stdout.split("\n")[-1].strip()
+
+        try:
+            return json.loads(last_line)
+        except Exception:
+            raise RuntimeError(
+                f"Invalid JSON received.\n\nSTDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
+            )
