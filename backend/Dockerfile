@@ -52,17 +52,9 @@ RUN echo "=== Project Structure ===" && ls -R /app
 
 ######################## NODE BACKEND ############################
 WORKDIR /app
-RUN npm install
-RUN npm install @mysten/seal
-# ❌ REMOVE: Walrus CLI / WASM SDK (not needed)
-# RUN npm install @mysten/walrus @mysten/walrus-wasm
-# ❌ REMOVE old mysten walrus libs
-# --------------------------------------
-
-# ✅ ADD: Node Fetch (required for REST uploader)
-RUN npm install node-fetch
-
-RUN npm install dotenv
+RUN npm install --legacy-peer-deps
+RUN npm install @mysten/seal --legacy-peer-deps
+RUN npm install node-fetch dotenv --legacy-peer-deps
 ENV NODE_PATH=/app/node_modules
 
 ######################## WALRUS UPLOADER FIX #####################
@@ -78,7 +70,7 @@ WORKDIR /app
 
 # Build tools are still needed (you said not to remove)
 RUN apt-get update && apt-get install -y \
-    build-essential gcc g++ cargo rustc libffi-dev python3-dev \
+    build-essential gcc g++ cargo rustc libffi-dev python3-dev libsodium-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir -r requirements.txt

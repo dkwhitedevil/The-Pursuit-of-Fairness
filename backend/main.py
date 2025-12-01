@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 from services.sui_reader import read_audit_table
 from services.fairness import run_fairness_audit
 from services.explain import generate_explanation
-from services.sui_signer import anchor_audit_on_sui
 from services.seal_node_bridge import seal_encrypt_node, prepare_identity
 from services.walrus_client import WalrusClient
 
@@ -254,6 +253,48 @@ def debug_paths():
         }
     }
 
+@app.get("/debug/anchor")
+def debug_anchor(blob: str = "abcd1234", score: int = 50):
+    return anchor_audit_js(blob, score, int(time.time()))
+
+        
+def anchor_audit_js(bundle_hash: str, fairness_score: int, timestamp: int) -> dict:
+    """
+    Calls the Node.js sui_anchor.js script to anchor audit data on Sui blockchain.
+    """
+    try:
+        script_path = os.path.join(os.getcwd(), "services", "sui_anchor.js")
+
+        # Pass arguments via environment variables
+        env = os.environ.copy()
+        env["BUNDLE_HASH"] = bundle_hash
+        env["FAIRNESS_SCORE"] = str(fairness_score)
+        env["TIMESTAMP"] = str(timestamp)
+
+        result = subprocess.run(
+            ["node", script_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            timeout=40
+        )
+
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "stderr": result.stderr.strip()
+            }
+
+        # Try parsing JSON output
+        try:
+            return json.loads(result.stdout)
+        except:
+            return {"status": "ok", "raw": result.stdout.strip()}
+
+    except Exception as e:
+        return {"status": "anchor_error", "error": str(e)}
+
 
 # ---------------------------------------------------------------
 # Upload dataset pipeline (existing)
@@ -336,7 +377,10 @@ async def upload_dataset(background: BackgroundTasks, file: UploadFile = File(..
     # 8. Anchor on Sui
     try:
         fairness_score = metrics.get("fairness_score", 0)
-        sui_result = anchor_audit_on_sui(walrus_info, fairness_score)
+        blob_id = walrus_info.get("blobId")
+        if not blob_id:
+            raise HTTPException(status_code=500, detail="Walrus upload succeeded but blobId is missing")
+        sui_result = anchor_audit_js(blob_id,int(fairness_score),int(time.time()))
     except Exception as e:
         sui_result = {"error": str(e)}
 
