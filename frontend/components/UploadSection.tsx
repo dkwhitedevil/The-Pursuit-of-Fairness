@@ -1,6 +1,4 @@
-// frontend/components/UploadSection.tsx
 "use client";
-
 import { useEffect, useState } from "react";
 import NeobrutalCard from "./NeobrutalCard";
 
@@ -11,65 +9,85 @@ export default function UploadSection() {
   const [error, setError] = useState<string | null>(null);
   const [computedProofHash, setComputedProofHash] = useState<string | null>(null);
 
-  const pick = (obj: any, ...keys: string[]) => {
-    for (const k of keys) {
-      if (!obj) continue;
-      const v = obj[k];
-      if (v !== undefined && v !== null && v !== "") return v;
-    }
-    return null;
-  };
-
-  // -------------------------------------------------------------------
-  // AUTO-COMPUTE proof hash: SHA256(blobId + txDigest)
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------
+  // Compute Proof Hash from (blobId + txDigest) if backend didn't send one
+  // ---------------------------------------------------------------
   useEffect(() => {
     let mounted = true;
 
-    async function computeHash() {
+    async function compute() {
       setComputedProofHash(null);
       if (!result) return;
 
       try {
-        const wal = result.walrus || {};
-        const sui = result.sui || {};
-
-        const blobId =
-          wal.blobId ||
-          wal.blob_id ||
-          wal.id ||
-          (wal.raw && (wal.raw.blobId || wal.raw.blob_id)) ||
+        // 1. Get Walrus Blob ID
+        const w = result.walrus || {};
+        const blob =
+          w.blobId ||
+          w.blob_id ||
+          w.id ||
+          w.blob ||
+          (w.raw_response && (w.raw_response.blobId || w.raw_response.blob_id)) ||
           null;
 
-        let tx =
-          pick(sui, "digest", "txDigest", "tx", "tx_digest") ||
-          (sui.raw && pick(sui.raw, "digest", "txDigest")) ||
+        // 2. Get Tx Digest
+        const s = result.sui || {};
+        const manifest = result.sui_manifest || {};
+
+        const pick = (obj: any, ...keys: string[]) => {
+          for (const k of keys) {
+            if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
+              return obj[k];
+            }
+          }
+          return null;
+        };
+
+        let txDigest =
+          pick(s, "tx_digest", "txDigest", "digest", "tx") ||
+          pick(manifest, "tx_digest", "txDigest", "digest", "tx") ||
+          (s.proof && (s.proof.tx_digest || s.proof.tx)) ||
           null;
 
-        if (!tx && sui.raw && typeof sui.raw.stdout === "string") {
-          const m = sui.raw.stdout.match(/Digest:\s*([A-Za-z0-9]+)/);
-          if (m) tx = m[1];
+        // NEW → Parse from "raw" string if no structured key found
+        if (!txDigest && typeof s.raw === "string") {
+          const m = s.raw.match(/Tx Digest:\s*([A-Za-z0-9]+)/i);
+          if (m) txDigest = m[1];
         }
 
-        if (!blobId || !tx) return;
+        // NEW → Parse from stdout if backend sends it differently
+        if (!txDigest && s.sui_raw && typeof s.sui_raw.stdout === "string") {
+          const out = s.sui_raw.stdout;
+          const m = out.match(/Transaction Digest:\s*([A-Za-z0-9]+)/i);
+          if (m) txDigest = m[1];
+        }
 
+        if (!blob || !txDigest) return;
+
+        // 3. Compute SHA256(blobId + txDigest)
+        const txt = String(blob) + String(txDigest);
         const enc = new TextEncoder();
-        const buf = enc.encode(String(blobId) + String(tx));
-        const hash = await crypto.subtle.digest("SHA-256", buf);
-        const arr = Array.from(new Uint8Array(hash));
-        const hex = arr.map(b => b.toString(16).padStart(2, "0")).join("");
+        const data = enc.encode(txt);
+        const hashBuf = await crypto.subtle.digest("SHA-256", data);
+        const hashHex = Array.from(new Uint8Array(hashBuf))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
 
-        if (mounted) setComputedProofHash(hex);
-      } catch (_) {}
+        if (mounted) setComputedProofHash(hashHex);
+      } catch (e) {
+        console.error("Proof hash compute failed:", e);
+      }
     }
 
-    computeHash();
-    return () => { mounted = false };
+    compute();
+    return () => {
+      mounted = false;
+    };
   }, [result]);
 
-  // -------------------------------------------------------------------
-  // UPLOAD HANDLER
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------
+  // Handle Upload
+  // ---------------------------------------------------------------
   const handleUpload = async () => {
     setError(null);
 
@@ -85,15 +103,19 @@ export default function UploadSection() {
     try {
       const res = await fetch(
         "https://the-pursuit-of-fairness-ebxs.onrender.com/upload-dataset",
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          body: formData,
+        }
       );
 
       if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`Upload failed: ${res.status} ${t}`);
+        const text = await res.text();
+        throw new Error(`Upload failed: ${res.status} ${text}`);
       }
 
-      setResult(await res.json());
+      const json = await res.json();
+      setResult(json);
     } catch (err: any) {
       setError(err.message || String(err));
     } finally {
@@ -101,12 +123,12 @@ export default function UploadSection() {
     }
   };
 
-  // -------------------------------------------------------------------
-  // FRONTEND UI
-  // -------------------------------------------------------------------
+  // ---------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------
   return (
     <div className="w-full">
-      {/* HERO */}
+      {/* HERO SECTION */}
       <div className="neo-hero p-8 rounded-lg mb-8">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start gap-8">
           <div className="flex-1">
@@ -114,15 +136,14 @@ export default function UploadSection() {
               The Pursuit of Fairness
             </h1>
             <p className="neo-hero-sub mt-4 text-xl opacity-90">
-              Upload datasets, run fairness audits, and anchor immutable proofs on Sui.
+              Upload datasets, run fairness audits, and verify Sui-anchored proofs.
             </p>
+
             <div className="mt-6">
               <button
                 onClick={() => {
-                  document.getElementById("upload-card")?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                  });
+                  const el = document.getElementById("upload-card");
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
                 }}
                 className="neo-cta"
               >
@@ -131,7 +152,7 @@ export default function UploadSection() {
             </div>
           </div>
 
-          {/* Upload Box */}
+          {/* UPLOAD CARD */}
           <div className="w-full md:w-96">
             <NeobrutalCard
               title="Quick Upload"
@@ -144,8 +165,8 @@ export default function UploadSection() {
                   accept=".csv"
                   onChange={(e) => {
                     setFile(e.target.files?.[0] || null);
-                    setError(null);
                     setResult(null);
+                    setError(null);
                   }}
                   className="mb-4 block w-full"
                 />
@@ -159,20 +180,20 @@ export default function UploadSection() {
                     {uploading ? "Uploading..." : "Upload & Analyze"}
                   </button>
                   <button
-                    className="neo-reset px-4 py-2 border rounded"
                     onClick={() => {
                       setFile(null);
                       setResult(null);
                       setError(null);
                     }}
+                    className="neo-reset px-4 py-2 border rounded"
                   >
                     Reset
                   </button>
                 </div>
 
                 {error && (
-                  <div className="mt-4 text-red-600 font-semibold">
-                    {error}
+                  <div className="mt-4 text-red-600">
+                    <strong>Error:</strong> {error}
                   </div>
                 )}
               </div>
@@ -181,28 +202,44 @@ export default function UploadSection() {
         </div>
       </div>
 
-      {/* RESULTS */}
+      {/* ================================================
+         RESULTS SECTION 
+      ================================================= */}
       {result && (
         <div className="max-w-6xl mx-auto">
-          <NeobrutalCard title="Audit Results" accent="#00b4d8">
+          <NeobrutalCard
+            title="Audit Results"
+            subtitle="Detailed backend output"
+            accent="#00b4d8"
+          >
             <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-
-              {/* WALRUS SECTION */}
+              {/* WALRUS CARD */}
               {(() => {
                 const w = result.walrus || {};
                 const blobId =
-                  w.blobId || w.blob_id || w.id ||
-                  (w.raw && (w.raw.blobId || w.raw.blob_id));
+                  w.blobId ||
+                  w.blob_id ||
+                  w.id ||
+                  w.blob ||
+                  (w.raw_response &&
+                    (w.raw_response.blobId || w.raw_response.blob_id)) ||
+                  null;
 
                 const objectId =
-                  w.objectId || w.object_id ||
-                  (w.raw && (w.raw.objectId || w.raw.object_id));
+                  w.objectId ||
+                  w.object_id ||
+                  (w.raw_response &&
+                    (w.raw_response.objectId || w.raw_response.object_id)) ||
+                  null;
 
                 const explorer =
                   w.explorer ||
+                  w.explorer_url ||
                   w.walrusURL ||
                   w.objectURL ||
-                  (w.raw && (w.raw.walrusURL || w.raw.objectURL));
+                  (w.raw_response &&
+                    (w.raw_response.walrusURL || w.raw_response.objectURL)) ||
+                  null;
 
                 return (
                   <div className="p-3 bg-white rounded border">
@@ -210,13 +247,11 @@ export default function UploadSection() {
                     <div className="text-sm mt-2">
                       <div><strong>Blob ID:</strong> {blobId || "—"}</div>
                       <div><strong>Object ID:</strong> {objectId || "—"}</div>
-
                       {explorer && (
                         <div>
                           <a
                             href={explorer}
                             target="_blank"
-                            rel="noreferrer"
                             className="text-blue-600 underline"
                           >
                             View on Walrus Explorer
@@ -228,35 +263,63 @@ export default function UploadSection() {
                 );
               })()}
 
-              {/* SUI SECTION */}
+              {/* SUI PROOF CARD */}
               {(() => {
                 const s = result.sui || {};
+                const manifest = result.sui_manifest || {};
 
-                const tx =
-                  pick(s, "digest", "txDigest", "tx", "tx_digest") ||
-                  (s.raw && pick(s.raw, "digest", "txDigest"));
+                const pick = (obj: any, ...keys: string[]) => {
+                  for (const k of keys) {
+                    if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
+                      return obj[k];
+                    }
+                  }
+                  return null;
+                };
 
-                const proofHash =
+                // ------------ TX DIGEST EXTRACTION ------------
+                let txDigest =
+                  pick(s, "tx_digest", "txDigest", "digest", "tx") ||
+                  pick(manifest, "tx_digest", "txDigest", "digest", "tx") ||
+                  (s.proof && (s.proof.tx_digest || s.proof.tx)) ||
+                  null;
+
+                // NEW: parse the raw string
+                if (!txDigest && typeof s.raw === "string") {
+                  const m = s.raw.match(/Tx Digest:\s*([A-Za-z0-9]+)/i);
+                  if (m) txDigest = m[1];
+                }
+
+                // NEW: parse from stdout
+                if (!txDigest && s.sui_raw && typeof s.sui_raw.stdout === "string") {
+                  const out = s.sui_raw.stdout;
+                  const m = out.match(/Transaction Digest:\s*([A-Za-z0-9]+)/i);
+                  if (m) txDigest = m[1];
+                }
+
+                // ------------ PROOF HASH EXTRACTION ------------
+                let proofHash =
+                  pick(s, "proof_hash", "proofHash") ||
+                  pick(manifest, "proof_hash", "proofHash") ||
+                  (s.proof && (s.proof.proof_hash || s.proof.hash)) ||
                   computedProofHash ||
-                  pick(s, "proof_hash", "proofHash");
+                  null;
 
-                const explorer =
-                  s.explorer ||
-                  (tx ? `https://suiexplorer.com/txblock/${tx}?network=testnet` : null);
+                const explorerLink =
+                  pick(s, "explorer_url", "explorer", "explorerUrl") ||
+                  (txDigest ? `https://suiscan.xyz/testnet/tx/${txDigest}` : null);
 
                 return (
                   <div className="p-3 bg-white rounded border">
                     <h4 className="font-medium">Sui Proof</h4>
                     <div className="text-sm mt-2">
-                      <div><strong>Tx Digest:</strong> {tx || "—"}</div>
+                      <div><strong>Tx Digest:</strong> {txDigest || "—"}</div>
                       <div><strong>Proof Hash:</strong> {proofHash || "—"}</div>
-
-                      {explorer && (
+                      {explorerLink && (
                         <div>
                           <a
-                            href={explorer}
+                            href={explorerLink}
                             target="_blank"
-                            rel="noreferrer"
                             className="text-blue-600 underline"
                           >
                             View on Sui Explorer
@@ -269,9 +332,10 @@ export default function UploadSection() {
               })()}
             </div>
 
+            {/* RAW JSON */}
             <details className="mt-3">
               <summary className="cursor-pointer">Raw JSON</summary>
-              <pre className="text-sm overflow-auto max-h-96 bg-white mt-2 p-3 rounded">
+              <pre className="text-sm overflow-auto max-h-96 bg-white p-3 rounded mt-2">
                 {JSON.stringify(result, null, 2)}
               </pre>
             </details>
